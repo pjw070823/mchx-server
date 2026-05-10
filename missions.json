@@ -1,0 +1,194 @@
+{
+  "$schema": "./missions.schema.json",
+  "version": 1,
+  "missions": [
+    {
+      "id": "easy_oak_logs",
+      "displayName": "참나무 원목 64개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:oak_log", "count": 64 }
+    },
+    {
+      "id": "easy_distinct_chest",
+      "displayName": "서로 다른 아이템으로 상자 채우기 (27종)",
+      "difficulty": "easy",
+      "detector": { "type": "chest_distinct_27" }
+    },
+    {
+      "id": "easy_obsidian",
+      "displayName": "흑요석 4개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:obsidian", "count": 4 }
+    },
+    {
+      "id": "easy_crafter_crafter",
+      "displayName": "제작기로 제작기 만들기",
+      "difficulty": "easy",
+      "detector": { "type": "advancement", "id": "minecraft:adventure/crafters_crafting_crafters" }
+    },
+    {
+      "id": "easy_cookie",
+      "displayName": "쿠키 1개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:cookie", "count": 1 }
+    },
+    {
+      "id": "easy_eight_dyes",
+      "displayName": "서로 다른 염료 8종",
+      "difficulty": "easy",
+      "detector": {
+        "type": "inventory_distinct",
+        "minDistinct": 8,
+        "candidates": [
+          "minecraft:white_dye", "minecraft:orange_dye", "minecraft:magenta_dye",
+          "minecraft:light_blue_dye", "minecraft:yellow_dye", "minecraft:lime_dye",
+          "minecraft:pink_dye", "minecraft:gray_dye", "minecraft:light_gray_dye",
+          "minecraft:cyan_dye", "minecraft:purple_dye", "minecraft:blue_dye",
+          "minecraft:brown_dye", "minecraft:green_dye", "minecraft:red_dye",
+          "minecraft:black_dye"
+        ]
+      }
+    },
+    {
+      "id": "easy_bookshelf",
+      "displayName": "책장 1개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:bookshelf", "count": 1 }
+    },
+    {
+      "id": "easy_powered_rails",
+      "displayName": "동력 레일 12개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:powered_rail", "count": 12 }
+    },
+    {
+      "id": "easy_iron_ingots",
+      "displayName": "철 주괴 16개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:iron_ingot", "count": 16 }
+    },
+    {
+      "id": "easy_ender_pearl",
+      "displayName": "엔더 진주 1개",
+      "difficulty": "easy",
+      "detector": { "type": "inventory_count", "item": "minecraft:ender_pearl", "count": 1 }
+    },
+    {
+      "id": "easy_what_a_deal",
+      "displayName": "훌륭한 거래군요!",
+      "difficulty": "easy",
+      "detector": { "type": "advancement", "id": "minecraft:adventure/trade" }
+    },
+    {
+      "id": "easy_six_stones",
+      "displayName": "화강암·섬록암·안산암·심층암·사암·응회암 모두",
+      "difficulty": "easy",
+      "detector": {
+        "type": "inventory_collection",
+        "items": [
+          "minecraft:granite",
+          "minecraft:diorite",
+          "minecraft:andesite",
+          "minecraft:deepslate",
+          "minecraft:sandstone",
+          "minecraft:tuff"
+        ]
+      }
+    },
+
+    {
+      "id": "medium_axolotl",
+      "displayName": "아홀로틀 양동이 1개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:axolotl_bucket", "count": 1 }
+    },
+    {
+      "id": "medium_three_lanterns",
+      "displayName": "랜턴·영혼 랜턴·구리 랜턴 모으기",
+      "difficulty": "medium",
+      "detector": {
+        "type": "inventory_collection",
+        "items": [
+          "minecraft:lantern",
+          "minecraft:soul_lantern",
+          "minecraft:copper_lantern"
+        ]
+      }
+    },
+    {
+      "id": "medium_return_to_sender",
+      "displayName": "전해지지 않은 러브레터",
+      "difficulty": "medium",
+      "detector": { "type": "advancement", "id": "minecraft:nether/return_to_sender" }
+    },
+    {
+      "id": "medium_beetroot_seeds",
+      "displayName": "비트 씨앗 8개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:beetroot_seeds", "count": 8 }
+    },
+    {
+      "id": "medium_glowstone",
+      "displayName": "발광석 블록 8개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:glowstone", "count": 8 }
+    },
+    {
+      "id": "medium_tnt",
+      "displayName": "TNT 1개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:tnt", "count": 1 }
+    },
+    {
+      "id": "medium_jukebox",
+      "displayName": "주크박스 1개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:jukebox", "count": 1 }
+    },
+    {
+      "id": "medium_cake",
+      "displayName": "케이크 1개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:cake", "count": 1 }
+    },
+
+    {
+      "id": "hard_any_potion",
+      "displayName": "아무 물약 1개",
+      "difficulty": "hard",
+      "detector": {
+        "type": "inventory_any_of",
+        "items": [
+          "minecraft:potion",
+          "minecraft:splash_potion",
+          "minecraft:lingering_potion"
+        ],
+        "totalCount": 1
+      }
+    },
+    {
+      "id": "hard_dried_ghast",
+      "displayName": "마른 가스트 1개",
+      "difficulty": "hard",
+      "detector": { "type": "inventory_count", "item": "minecraft:dried_ghast", "count": 1 }
+    },
+    {
+      "id": "hard_pufferfish",
+      "displayName": "복어 2개",
+      "difficulty": "hard",
+      "detector": { "type": "inventory_count", "item": "minecraft:pufferfish", "count": 2 }
+    },
+    {
+      "id": "hard_honey_bottle",
+      "displayName": "꿀병 1개",
+      "difficulty": "hard",
+      "detector": { "type": "inventory_count", "item": "minecraft:honey_bottle", "count": 1 }
+    },
+    {
+      "id": "hard_enchanted_book",
+      "displayName": "아무 마법이 부여된 책 1개",
+      "difficulty": "hard",
+      "detector": { "type": "inventory_count", "item": "minecraft:enchanted_book", "count": 1 }
+    }
+  ]
+}
