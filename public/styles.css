@@ -1,0 +1,300 @@
+:root {
+  --bg: #0f1115;
+  --panel: #1a1d23;
+  --text: #e6e8eb;
+  --muted: #8a8f99;
+  --easy: #3b693a;
+  --medium: #776228;
+  --hard: #773a28;
+  --side-a: #4a8fd9;
+  --side-b: #c14ad9;
+  --line: #353a44;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#join { display: flex; gap: 8px; }
+
+#join input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  width: 110px;
+}
+
+#join button {
+  background: var(--side-a);
+  border: 0;
+  color: white;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "status   status"
+    "players  board"
+    "log      log";
+  gap: 16px;
+  padding: 16px 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+#status {
+  grid-area: status;
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#status span:first-child::before { content: "● "; color: #888; }
+#status.connected span:first-child::before { color: #6cbf6a; }
+#status.error span:first-child::before { color: #d96a4a; }
+
+#players {
+  grid-area: players;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+  transition: background 100ms ease, box-shadow 100ms ease;
+}
+
+.player:hover { background: #20242c; }
+
+.player.side-a { border-left-color: var(--side-a); }
+.player.side-b { border-left-color: var(--side-b); }
+
+.player.is-me {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.player.is-me.side-a { color: var(--side-a); }
+.player.is-me.side-b { color: var(--side-b); }
+.player .name { color: var(--text); }
+.player.is-me .name { color: currentColor; font-weight: 700; }
+
+.player .me-badge {
+  display: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: currentColor;
+  color: #0f1115;
+}
+.player.is-me .me-badge { display: inline-block; }
+
+.badge {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 12px;
+  background: var(--bg);
+}
+
+.side-a .badge { color: var(--side-a); }
+.side-b .badge { color: var(--side-b); }
+
+.name { font-size: 14px; }
+.claimed { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+#board-wrap {
+  grid-area: board;
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 540px;
+}
+
+#board {
+  width: 100%;
+  height: 100%;
+  max-height: 700px;
+}
+
+.hex-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(15, 17, 21, 0.95);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 80ms ease;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.hex-tooltip.visible { opacity: 1; }
+
+.hex-tooltip .difficulty {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 6px;
+  color: rgba(0, 0, 0, 0.85);
+}
+.hex-tooltip .difficulty.easy { background: var(--easy); }
+.hex-tooltip .difficulty.medium { background: var(--medium); }
+.hex-tooltip .difficulty.hard { background: var(--hard); }
+
+.hex-tooltip .claim-info {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.boundary {
+  stroke-width: 12;
+  stroke-linejoin: miter;
+  stroke-miterlimit: 4;
+  stroke-linecap: butt;
+  fill: none;
+  pointer-events: none;
+}
+.boundary.side-a { stroke: var(--side-a); }
+.boundary.side-b { stroke: var(--side-b); }
+
+.hex {
+  fill: var(--easy);
+  stroke: var(--line);
+  stroke-width: 1;
+  cursor: default;
+  transition: filter 120ms ease;
+}
+
+.hex.medium { fill: var(--medium); }
+.hex.hard { fill: var(--hard); }
+.hex.claimed-a { fill: var(--side-a); }
+.hex.claimed-b { fill: var(--side-b); }
+.hex:hover { filter: brightness(1.15); }
+
+.hex-label {
+  fill: rgba(255, 255, 255, 0.92);
+  font-size: 8px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* labels stay white on both states; tile color shift alone gives the contrast */
+
+#legend {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: var(--easy);
+  color: rgba(0, 0, 0, 0.7);
+  font-weight: 600;
+}
+
+.chip.medium { background: var(--medium); }
+.chip.hard { background: var(--hard); color: rgba(0, 0, 0, 0.85); }
+.chip.claimed-a { background: var(--side-a); color: white; }
+.chip.claimed-b { background: var(--side-b); color: white; }
+
+#claim-log {
+  grid-area: log;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#claim-log h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+#log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 4px;
+}
+
+#log li {
+  padding: 6px 8px;
+  border-left: 3px solid var(--line);
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+
+#log li.side-a { border-left-color: var(--side-a); }
+#log li.side-b { border-left-color: var(--side-b); }
