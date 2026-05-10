@@ -143,6 +143,14 @@ function handleClientMessage(
       state.room.attemptClaim(state.playerId, msg.tileId, msg.missionId);
       return;
     }
+
+    case "chat": {
+      if (!state.room || state.isSpectator) return sendError(ws, "no_room", "not in a room");
+      const text = msg.text.trim();
+      if (!text) return;
+      state.room.broadcastChat(state.playerId, text.slice(0, 256));
+      return;
+    }
   }
 }
 

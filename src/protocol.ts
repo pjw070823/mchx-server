@@ -78,6 +78,10 @@ export const ClientMessage = z.discriminatedUnion("type", [
     missionId: z.string(),
   }),
   z.object({
+    type: z.literal("chat"),
+    text: z.string().min(1).max(256),
+  }),
+  z.object({
     type: z.literal("spectate"),
     roomCode: z.string().length(4),
   }),
@@ -127,6 +131,12 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("match_end"),
     winner: Side.nullable(),
     reason: z.enum(["connection", "forfeit", "disconnect"]),
+  }),
+  z.object({
+    type: z.literal("chat_message"),
+    senderId: z.string(),
+    senderName: z.string(),
+    text: z.string(),
   }),
   z.object({
     type: z.literal("pong"),

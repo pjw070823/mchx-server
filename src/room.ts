@@ -114,6 +114,22 @@ export class Room {
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
   }
 
+  broadcastChat(playerId: string, text: string): void {
+    const sender = this.players.get(playerId);
+    if (!sender) return;
+    const msg: ServerMessage = {
+      type: "chat_message",
+      senderId: playerId,
+      senderName: sender.name,
+      text,
+    };
+    // send to everyone except sender (they see local echo); spectators get a copy too.
+    for (const [id, p] of this.players) {
+      if (id !== playerId) this.send(p.ws, msg);
+    }
+    for (const sp of this.spectators) this.send(sp, msg);
+  }
+
   attemptClaim(playerId: string, tileId: TileId, missionId: string): void {
     const player = this.players.get(playerId);
     if (!player || !player.side) return;
