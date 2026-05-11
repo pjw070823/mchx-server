@@ -21,79 +21,88 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 8787);
-const SPECTATOR_PORT = Number(process.env.SPECTATOR_PORT ?? 8000);
+const SPECTATOR_PORT = Number(process.env.SPECTATOR_PORT ?? 80);
 const PUBLIC_DIR = resolve(__dirname, "../public");
+
+const rooms = new RoomRegistry();
+
+/**
+ * All read-only REST routes the web UI needs. Mounted on BOTH the main app (8787)
+ * and the spectator app (80) so the static page can hit /api/* via same-origin
+ * regardless of which port the user loaded it from.
+ *
+ * Only side-effecting routes (none currently) and the WS endpoint live exclusively
+ * on the main port.
+ */
+function mountApiRoutes(target: express.Express): void {
+  target.get("/api/missions", (_req, res) => {
+    res.json({ version: 1, missions: ALL_MISSIONS });
+  });
+  target.get("/api/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+  target.get("/api/rating/:uuid", (req, res) => {
+    const row = getPlayer(req.params.uuid);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    res.json(row);
+  });
+  target.get("/api/leaderboard", (req, res) => {
+    const limit = Number(req.query.limit ?? 50);
+    res.json({ players: getLeaderboard(limit) });
+  });
+  target.get("/api/matches", (req, res) => {
+    const uuid = req.query.uuid ? String(req.query.uuid) : null;
+    const player = req.query.player ? String(req.query.player) : null;
+    const limit = Number(req.query.limit ?? 20);
+    const offset = Number(req.query.offset ?? 0);
+    if (uuid) {
+      return res.json({ matches: getRecentMatches(uuid, limit), total: undefined });
+    }
+    if (player) {
+      return res.json({
+        matches: getMatchesByPlayerName(player, limit, offset),
+        total: getMatchCount(player),
+      });
+    }
+    return res.json({ matches: getAllMatches(limit, offset), total: getMatchCount() });
+  });
+  target.get("/api/matches/:id", (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
+    const row = getMatchById(id);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    res.json(row);
+  });
+  target.get("/api/players/search", (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.json({ players: [] });
+    const limit = Number(req.query.limit ?? 50);
+    res.json({ players: searchPlayersByName(q, limit) });
+  });
+  target.get("/api/players/:uuid", (req, res) => {
+    const row = getPlayer(req.params.uuid);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    res.json(row);
+  });
+  target.get("/api/rooms", (_req, res) => {
+    res.json({ rooms: rooms.listActive() });
+  });
+}
 
 // Main API + WS server (mod connects here; backwards-compat also serves the board UI)
 const app = express();
 app.use(express.static(PUBLIC_DIR));
-app.get("/api/missions", (_req, res) => {
-  res.json({ version: 1, missions: ALL_MISSIONS });
-});
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
-});
-app.get("/api/rating/:uuid", (req, res) => {
-  const row = getPlayer(req.params.uuid);
-  if (!row) return res.status(404).json({ error: "not_found" });
-  res.json(row);
-});
-app.get("/api/leaderboard", (req, res) => {
-  const limit = Number(req.query.limit ?? 50);
-  res.json({ players: getLeaderboard(limit) });
-});
-app.get("/api/matches", (req, res) => {
-  const uuid = req.query.uuid ? String(req.query.uuid) : null;
-  const player = req.query.player ? String(req.query.player) : null;
-  const limit = Number(req.query.limit ?? 20);
-  const offset = Number(req.query.offset ?? 0);
-  if (uuid) {
-    return res.json({ matches: getRecentMatches(uuid, limit), total: undefined });
-  }
-  if (player) {
-    return res.json({
-      matches: getMatchesByPlayerName(player, limit, offset),
-      total: getMatchCount(player),
-    });
-  }
-  return res.json({ matches: getAllMatches(limit, offset), total: getMatchCount() });
-});
-app.get("/api/matches/:id", (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
-  const row = getMatchById(id);
-  if (!row) return res.status(404).json({ error: "not_found" });
-  res.json(row);
-});
-app.get("/api/players/search", (req, res) => {
-  const q = String(req.query.q ?? "").trim();
-  if (!q) return res.json({ players: [] });
-  const limit = Number(req.query.limit ?? 50);
-  res.json({ players: searchPlayersByName(q, limit) });
-});
-app.get("/api/players/:uuid", (req, res) => {
-  const row = getPlayer(req.params.uuid);
-  if (!row) return res.status(404).json({ error: "not_found" });
-  res.json(row);
-});
-app.get("/api/rooms", (_req, res) => {
-  res.json({ rooms: rooms.listActive() });
-});
+mountApiRoutes(app);
 
-// Spectator-only HTTP server. Serves the same static files + /api/missions but no WS.
-// Lets us expose the board on a friendlier port without entangling the mod's WS port.
+// Spectator HTTP server on a friendlier port. Same static files + same read-only
+// API surface so the SPA works identically regardless of which port served it.
+// WS endpoint stays exclusively on the main port.
 const spectatorApp = express();
 spectatorApp.use(express.static(PUBLIC_DIR));
-spectatorApp.get("/api/missions", (_req, res) => {
-  res.json({ version: 1, missions: ALL_MISSIONS });
-});
-spectatorApp.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
-});
+mountApiRoutes(spectatorApp);
 
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-const rooms = new RoomRegistry();
 const spectatorHttpServer = createServer(spectatorApp);
 
 interface ConnState {

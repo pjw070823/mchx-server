@@ -1,6 +1,6 @@
 // Minecraft Hex — SPA router & view renderers.
 // Hash-based routing keeps everything as a single static page; views fetch
-// against the existing REST endpoints under /api/* (served on both 8787 and 8000).
+// against the existing REST endpoints under /api/* (served on both 8787 and 80).
 
 import { mountSpectator, renderBoardSvg, loadMissions, escapeHtml } from "/board.js";
 
