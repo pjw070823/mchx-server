@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { decode, encode, type ServerMessage } from "./protocol.js";
 import { Room, RoomRegistry } from "./room.js";
 import { ALL_MISSIONS } from "./missions.js";
+import { getLeaderboard, getPlayer, getRecentMatches } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +23,21 @@ app.get("/api/missions", (_req, res) => {
 });
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+app.get("/api/rating/:uuid", (req, res) => {
+  const row = getPlayer(req.params.uuid);
+  if (!row) return res.status(404).json({ error: "not_found" });
+  res.json(row);
+});
+app.get("/api/leaderboard", (req, res) => {
+  const limit = Number(req.query.limit ?? 20);
+  res.json({ players: getLeaderboard(limit) });
+});
+app.get("/api/matches", (req, res) => {
+  const uuid = String(req.query.uuid ?? "");
+  if (!uuid) return res.status(400).json({ error: "missing_uuid" });
+  const limit = Number(req.query.limit ?? 10);
+  res.json({ matches: getRecentMatches(uuid, limit) });
 });
 
 // Spectator-only HTTP server. Serves the same static files + /api/missions but no WS.

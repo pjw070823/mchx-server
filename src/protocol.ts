@@ -14,6 +14,7 @@ export const PlayerInfo = z.object({
   name: z.string(),
   side: Side.nullable(),
   uuid: z.string().nullable(),
+  elo: z.number().int().nullable(),
 });
 export type PlayerInfo = z.infer<typeof PlayerInfo>;
 
@@ -21,6 +22,7 @@ export const RoomSettings = z.object({
   gameMode: z.enum(["1v1", "2v2"]),
   inventorySave: z.boolean(),
   saturation: z.boolean(),
+  rated: z.boolean(),
 });
 export type RoomSettings = z.infer<typeof RoomSettings>;
 
@@ -28,7 +30,15 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   gameMode: "1v1",
   inventorySave: false,
   saturation: false,
+  rated: true,
 };
+
+export const EloChange = z.object({
+  before: z.number().int(),
+  after: z.number().int(),
+  delta: z.number().int(),
+});
+export type EloChange = z.infer<typeof EloChange>;
 
 export const BoardTile = z.object({
   tileId: TileId,
@@ -143,6 +153,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("match_end"),
     winner: Side.nullable(),
     reason: z.enum(["connection", "forfeit", "disconnect"]),
+    eloChanges: z.record(z.string(), EloChange),
   }),
   z.object({
     type: z.literal("chat_message"),

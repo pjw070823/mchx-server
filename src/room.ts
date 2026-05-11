@@ -3,6 +3,7 @@ import type { WebSocket } from "ws";
 import type {
   BoardTile,
   ClaimedTile,
+  EloChange,
   PlayerInfo,
   RoomSettings,
   RoomStatus,
@@ -13,6 +14,14 @@ import type {
 import { DEFAULT_SETTINGS, encode } from "./protocol.js";
 import { buildBoard, hasWon, mulberry32 } from "./hex.js";
 import { getMission } from "./missions.js";
+import {
+  DEFAULT_ELO,
+  applyMatchResult,
+  getOrCreatePlayer,
+  recordMatch,
+  type PlayerRow,
+} from "./db.js";
+import { computeNewElo } from "./elo.js";
 
 const newRoomCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 4);
 
@@ -22,6 +31,9 @@ interface PlayerSession {
   side: Side | null;
   uuid: string | null;
   ws: WebSocket;
+  /** Loaded from DB at addPlayer time, mutated after match end. */
+  elo: number;
+  gamesPlayed: number;
 }
 
 export class Room {
@@ -38,6 +50,8 @@ export class Room {
   private startedAt: number | null = null;
   private readonly readyPlayers = new Set<string>();
   private matchActiveAt: number | null = null;
+  /** Lifecycle flag — true once we've ended this match and committed to DB. */
+  private matchSettled = false;
 
   constructor() {
     this.code = newRoomCode();
@@ -60,7 +74,18 @@ export class Room {
     if (this.players.size >= this.requiredPlayers()) return null;
     if (this.status !== "waiting") return null;
     const side: Side = this.players.size === 0 ? "A" : "B";
-    const session: PlayerSession = { id: playerId, name, side, uuid, ws };
+    let elo = DEFAULT_ELO;
+    let gamesPlayed = 0;
+    if (uuid) {
+      try {
+        const record = getOrCreatePlayer(uuid, name);
+        elo = record.elo;
+        gamesPlayed = record.games_played;
+      } catch (e) {
+        console.warn(`[room] getOrCreatePlayer failed: ${(e as Error).message}`);
+      }
+    }
+    const session: PlayerSession = { id: playerId, name, side, uuid, ws, elo, gamesPlayed };
     this.players.set(playerId, session);
     if (this.hostId === null) this.hostId = playerId;
     return session;
@@ -73,9 +98,15 @@ export class Room {
     const remaining = this.players.values().next().value ?? null;
     if (this.hostId === playerId) this.hostId = remaining?.id ?? null;
     if (this.status === "playing") {
+      const winnerSide = remaining?.side ?? null;
+      const eloChanges = this.settleMatch(winnerSide, "disconnect", removed);
       this.status = "ended";
-      const winner = remaining?.side ?? null;
-      this.broadcast({ type: "match_end", winner, reason: "disconnect" });
+      this.broadcast({
+        type: "match_end",
+        winner: winnerSide,
+        reason: "disconnect",
+        eloChanges,
+      });
       return { wasPlaying: true, remaining };
     }
     return { wasPlaying: false, remaining };
@@ -96,12 +127,11 @@ export class Room {
   updateSettings(playerId: string, partial: Partial<RoomSettings>): boolean {
     if (this.hostId !== playerId) return false;
     if (this.status !== "waiting") return false;
-    // Defensive: only apply fields that are present + non-null. Older clients may still
-    // send `{gameMode:null,…}` and we don't want to corrupt `settings` with null values.
     const next: RoomSettings = { ...this.settings };
     if (partial.gameMode != null) next.gameMode = partial.gameMode;
     if (partial.inventorySave != null) next.inventorySave = partial.inventorySave;
     if (partial.saturation != null) next.saturation = partial.saturation;
+    if (partial.rated != null) next.rated = partial.rated;
     this.settings = next;
     return true;
   }
@@ -116,22 +146,19 @@ export class Room {
   private beginMatch(): void {
     const rand = mulberry32(Number(this.seed & 0xffffffffn));
     this.board = buildBoard(rand);
-    this.startedAt = Date.now() + 3000;
+    this.startedAt = Date.now();
     this.status = "playing";
     this.readyPlayers.clear();
     this.matchActiveAt = null;
+    this.matchSettled = false;
     for (const p of this.players.values()) this.sendMatchSnapshot(p.ws, p);
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
   }
 
-  /**
-   * Called when a client finishes loading its singleplayer world. Once every player has
-   * reported ready, we schedule the countdown (3s) and broadcast the active-at time.
-   */
   markReady(playerId: string): void {
     if (this.status !== "playing" || !this.board) return;
     if (!this.players.has(playerId)) return;
-    if (this.matchActiveAt !== null) return; // countdown already scheduled
+    if (this.matchActiveAt !== null) return;
     this.readyPlayers.add(playerId);
     if (this.readyPlayers.size >= this.players.size) {
       const startsAt = Date.now() + 3000;
@@ -149,7 +176,6 @@ export class Room {
       senderName: sender.name,
       text,
     };
-    // send to everyone except sender (they see local echo); spectators get a copy too.
     for (const [id, p] of this.players) {
       if (id !== playerId) this.send(p.ws, msg);
     }
@@ -166,7 +192,6 @@ export class Room {
       kind,
       text,
     };
-    // others only — sender sees their own death/advancement via vanilla chat already
     for (const [id, p] of this.players) {
       if (id !== playerId) this.send(p.ws, msg);
     }
@@ -177,9 +202,7 @@ export class Room {
     const player = this.players.get(playerId);
     if (!player || !player.side) return;
     if (this.status !== "playing" || !this.board) {
-      this.send(player.ws, {
-        type: "claim_rejected", tileId, reason: "match_not_active",
-      });
+      this.send(player.ws, { type: "claim_rejected", tileId, reason: "match_not_active" });
       return;
     }
     if (this.matchActiveAt === null || Date.now() < this.matchActiveAt) {
@@ -210,9 +233,90 @@ export class Room {
     this.broadcast({ type: "tile_claimed", tileId, side: player.side, missionId, claimedAt });
 
     if (hasWon(player.side, this.claimedMap)) {
+      const eloChanges = this.settleMatch(player.side, "connection", null);
       this.status = "ended";
-      this.broadcast({ type: "match_end", winner: player.side, reason: "connection" });
+      this.broadcast({
+        type: "match_end",
+        winner: player.side,
+        reason: "connection",
+        eloChanges,
+      });
     }
+  }
+
+  /**
+   * Compute ELO changes (if rated), update DB, persist the match row.
+   * `quitter` is the player who disconnected if reason==="disconnect"; otherwise null.
+   * Returns the per-player elo-change map for clients to display.
+   */
+  private settleMatch(
+    winnerSide: Side | null,
+    reason: "connection" | "forfeit" | "disconnect",
+    quitter: PlayerSession | null,
+  ): Record<string, EloChange> {
+    if (this.matchSettled) return {};
+    this.matchSettled = true;
+
+    // Find side A and side B sessions even after `quitter` was removed from `players`.
+    const all: PlayerSession[] = [...this.players.values()];
+    if (quitter) all.push(quitter);
+    const a = all.find((s) => s.side === "A") ?? null;
+    const b = all.find((s) => s.side === "B") ?? null;
+
+    const aScore: 0 | 0.5 | 1 = winnerSide === "A" ? 1 : winnerSide === "B" ? 0 : 0.5;
+    const bScore: 0 | 0.5 | 1 = winnerSide === "B" ? 1 : winnerSide === "A" ? 0 : 0.5;
+
+    const eloChanges: Record<string, EloChange> = {};
+    let aBefore: number | null = null, aAfter: number | null = null;
+    let bBefore: number | null = null, bAfter: number | null = null;
+
+    if (this.settings.rated && a && b) {
+      const updA = computeNewElo(a.elo, b.elo, a.gamesPlayed, aScore);
+      const updB = computeNewElo(b.elo, a.elo, b.gamesPlayed, bScore);
+      aBefore = updA.before; aAfter = updA.after;
+      bBefore = updB.before; bAfter = updB.after;
+      eloChanges[a.id] = updA;
+      eloChanges[b.id] = updB;
+      try {
+        if (a.uuid) applyMatchResult(a.uuid, updA.after, aScore === 1 ? 1 : aScore === 0 ? -1 : 0);
+        if (b.uuid) applyMatchResult(b.uuid, updB.after, bScore === 1 ? 1 : bScore === 0 ? -1 : 0);
+      } catch (e) {
+        console.warn(`[room] applyMatchResult failed: ${(e as Error).message}`);
+      }
+      // Reflect the new rating into the session so subsequent room_state broadcasts carry it.
+      a.elo = updA.after;
+      b.elo = updB.after;
+    } else if (a && b) {
+      aBefore = a.elo; aAfter = a.elo;
+      bBefore = b.elo; bAfter = b.elo;
+    }
+
+    try {
+      recordMatch({
+        roomCode: this.code,
+        seed: this.seed.toString(),
+        startedAt: this.startedAt,
+        endedAt: Date.now(),
+        winnerSide: winnerSide ?? null,
+        reason,
+        settingsJson: JSON.stringify(this.settings),
+        boardJson: JSON.stringify(this.board ?? []),
+        claimedJson: JSON.stringify(this.claimedLog),
+        playerAUuid: a?.uuid ?? null,
+        playerAName: a?.name ?? null,
+        playerAEloBefore: aBefore,
+        playerAEloAfter: aAfter,
+        playerBUuid: b?.uuid ?? null,
+        playerBName: b?.name ?? null,
+        playerBEloBefore: bBefore,
+        playerBEloAfter: bAfter,
+        rated: this.settings.rated,
+      });
+    } catch (e) {
+      console.warn(`[room] recordMatch failed: ${(e as Error).message}`);
+    }
+
+    return eloChanges;
   }
 
   private sendRoomState(ws: WebSocket, viewer: PlayerSession | null): void {
@@ -269,7 +373,7 @@ export class Room {
 }
 
 function toPlayerInfo(s: PlayerSession): PlayerInfo {
-  return { id: s.id, name: s.name, side: s.side, uuid: s.uuid };
+  return { id: s.id, name: s.name, side: s.side, uuid: s.uuid, elo: s.elo };
 }
 
 function randomSeed64(): bigint {
