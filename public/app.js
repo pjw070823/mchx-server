@@ -392,7 +392,7 @@ async function renderMatchDetail(id) {
             <h3>설정</h3>
             <ul class="kv-list">
               <li><span>레이팅 반영</span><span>${settings.rated ? "예" : "아니오"}</span></li>
-              <li><span>인벤토리 유지</span><span>${settings.keepInventory ? "예" : "아니오"}</span></li>
+              <li><span>인벤토리 유지</span><span>${settings.inventorySave ? "예" : "아니오"}</span></li>
               <li><span>포화 효과</span><span>${settings.saturation ? "예" : "아니오"}</span></li>
               ${match.seed ? `<li><span>시드</span><span class="mono">${escapeHtml(match.seed)}</span></li>` : ""}
               ${match.room_code ? `<li><span>방 코드</span><span class="mono">${escapeHtml(match.room_code)}</span></li>` : ""}
