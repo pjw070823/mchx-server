@@ -96,7 +96,13 @@ export class Room {
   updateSettings(playerId: string, partial: Partial<RoomSettings>): boolean {
     if (this.hostId !== playerId) return false;
     if (this.status !== "waiting") return false;
-    this.settings = { ...this.settings, ...partial };
+    // Defensive: only apply fields that are present + non-null. Older clients may still
+    // send `{gameMode:null,…}` and we don't want to corrupt `settings` with null values.
+    const next: RoomSettings = { ...this.settings };
+    if (partial.gameMode != null) next.gameMode = partial.gameMode;
+    if (partial.inventorySave != null) next.inventorySave = partial.inventorySave;
+    if (partial.saturation != null) next.saturation = partial.saturation;
+    this.settings = next;
     return true;
   }
 
