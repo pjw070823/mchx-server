@@ -21,9 +21,13 @@ const state = {
   players: { A: null, B: null },
 };
 
+// WS lives on a separate port from the spectator static files. We always reach the same
+// host but switch ports: 8000 serves this page, 8787 serves the WS endpoint.
+const WS_PORT = 8787;
+
 function defaultWsUrl() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${location.host}/ws`;
+  return `${proto}://${location.hostname}:${WS_PORT}/ws`;
 }
 
 async function loadMissions() {

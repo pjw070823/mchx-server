@@ -27,6 +27,12 @@ const MissionDetector = z.discriminatedUnion("type", [
     totalCount: z.number().int().positive(),
   }),
   z.object({
+    type: z.literal("inventory_potion"),
+    items: z.array(z.string()).min(1),
+    excludePotions: z.array(z.string()).default([]),
+    totalCount: z.number().int().positive(),
+  }),
+  z.object({
     type: z.literal("advancement"),
     id: z.string(),
   }),

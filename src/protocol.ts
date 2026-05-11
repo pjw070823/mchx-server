@@ -82,6 +82,11 @@ export const ClientMessage = z.discriminatedUnion("type", [
     text: z.string().min(1).max(256),
   }),
   z.object({
+    type: z.literal("world_event"),
+    kind: z.enum(["death", "advancement"]),
+    text: z.string().min(1).max(512),
+  }),
+  z.object({
     type: z.literal("spectate"),
     roomCode: z.string().length(4),
   }),
@@ -136,6 +141,13 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("chat_message"),
     senderId: z.string(),
     senderName: z.string(),
+    text: z.string(),
+  }),
+  z.object({
+    type: z.literal("world_event_message"),
+    senderId: z.string(),
+    senderName: z.string(),
+    kind: z.enum(["death", "advancement"]),
     text: z.string(),
   }),
   z.object({

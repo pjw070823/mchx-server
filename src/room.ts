@@ -130,6 +130,23 @@ export class Room {
     for (const sp of this.spectators) this.send(sp, msg);
   }
 
+  broadcastWorldEvent(playerId: string, kind: "death" | "advancement", text: string): void {
+    const sender = this.players.get(playerId);
+    if (!sender) return;
+    const msg: ServerMessage = {
+      type: "world_event_message",
+      senderId: playerId,
+      senderName: sender.name,
+      kind,
+      text,
+    };
+    // others only — sender sees their own death/advancement via vanilla chat already
+    for (const [id, p] of this.players) {
+      if (id !== playerId) this.send(p.ws, msg);
+    }
+    for (const sp of this.spectators) this.send(sp, msg);
+  }
+
   attemptClaim(playerId: string, tileId: TileId, missionId: string): void {
     const player = this.players.get(playerId);
     if (!player || !player.side) return;

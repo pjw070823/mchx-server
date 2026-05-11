@@ -241,9 +241,15 @@ main {
 
 #legend {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.legend-row {
+  display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 4px;
 }
 
 .chip {

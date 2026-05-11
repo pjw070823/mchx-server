@@ -11,8 +11,10 @@ import { ALL_MISSIONS } from "./missions.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 8787);
+const SPECTATOR_PORT = Number(process.env.SPECTATOR_PORT ?? 8000);
 const PUBLIC_DIR = resolve(__dirname, "../public");
 
+// Main API + WS server (mod connects here; backwards-compat also serves the board UI)
 const app = express();
 app.use(express.static(PUBLIC_DIR));
 app.get("/api/missions", (_req, res) => {
@@ -22,9 +24,21 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+// Spectator-only HTTP server. Serves the same static files + /api/missions but no WS.
+// Lets us expose the board on a friendlier port without entangling the mod's WS port.
+const spectatorApp = express();
+spectatorApp.use(express.static(PUBLIC_DIR));
+spectatorApp.get("/api/missions", (_req, res) => {
+  res.json({ version: 1, missions: ALL_MISSIONS });
+});
+spectatorApp.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 const rooms = new RoomRegistry();
+const spectatorHttpServer = createServer(spectatorApp);
 
 interface ConnState {
   playerId: string;
@@ -151,6 +165,14 @@ function handleClientMessage(
       state.room.broadcastChat(state.playerId, text.slice(0, 256));
       return;
     }
+
+    case "world_event": {
+      if (!state.room || state.isSpectator) return sendError(ws, "no_room", "not in a room");
+      const text = msg.text.trim();
+      if (!text) return;
+      state.room.broadcastWorldEvent(state.playerId, msg.kind, text.slice(0, 512));
+      return;
+    }
   }
 }
 
@@ -163,7 +185,11 @@ function sendError(ws: WebSocket, code: string, message: string): void {
 }
 
 httpServer.listen(PORT, () => {
-  console.log(`mchx server listening on http://localhost:${PORT}`);
+  console.log(`mchx api/ws server listening on http://localhost:${PORT}`);
   console.log(`  ws endpoint: ws://localhost:${PORT}/ws`);
   console.log(`  loaded ${ALL_MISSIONS.length} missions`);
+});
+
+spectatorHttpServer.listen(SPECTATOR_PORT, () => {
+  console.log(`mchx spectator board listening on http://localhost:${SPECTATOR_PORT}`);
 });
