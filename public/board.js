@@ -8,6 +8,16 @@ const HEX_W = HEX_R * 2;                // flat-top width
 const HEX_H = HEX_R * Math.sqrt(3);     // flat-top height
 const COL_DX = HEX_R * 1.5;             // horizontal step between columns
 
+// WS lives on a separate port from the spectator static files. We always reach the same
+// host but switch ports: 8000 serves this page, 8787 serves the WS endpoint.
+// Declared above `state` so `defaultWsUrl()` doesn't hit the TDZ on module load.
+const WS_PORT = 8787;
+
+function defaultWsUrl() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.hostname}:${WS_PORT}/ws`;
+}
+
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
@@ -20,15 +30,6 @@ const state = {
   status: "waiting",
   players: { A: null, B: null },
 };
-
-// WS lives on a separate port from the spectator static files. We always reach the same
-// host but switch ports: 8000 serves this page, 8787 serves the WS endpoint.
-const WS_PORT = 8787;
-
-function defaultWsUrl() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${location.hostname}:${WS_PORT}/ws`;
-}
 
 async function loadMissions() {
   const res = await fetch("/api/missions");
