@@ -7,7 +7,16 @@ import { nanoid } from "nanoid";
 import { decode, encode, type ServerMessage } from "./protocol.js";
 import { Room, RoomRegistry } from "./room.js";
 import { ALL_MISSIONS } from "./missions.js";
-import { getLeaderboard, getPlayer, getRecentMatches } from "./db.js";
+import {
+  getAllMatches,
+  getLeaderboard,
+  getMatchById,
+  getMatchCount,
+  getMatchesByPlayerName,
+  getPlayer,
+  getRecentMatches,
+  searchPlayersByName,
+} from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,14 +39,45 @@ app.get("/api/rating/:uuid", (req, res) => {
   res.json(row);
 });
 app.get("/api/leaderboard", (req, res) => {
-  const limit = Number(req.query.limit ?? 20);
+  const limit = Number(req.query.limit ?? 50);
   res.json({ players: getLeaderboard(limit) });
 });
 app.get("/api/matches", (req, res) => {
-  const uuid = String(req.query.uuid ?? "");
-  if (!uuid) return res.status(400).json({ error: "missing_uuid" });
-  const limit = Number(req.query.limit ?? 10);
-  res.json({ matches: getRecentMatches(uuid, limit) });
+  const uuid = req.query.uuid ? String(req.query.uuid) : null;
+  const player = req.query.player ? String(req.query.player) : null;
+  const limit = Number(req.query.limit ?? 20);
+  const offset = Number(req.query.offset ?? 0);
+  if (uuid) {
+    return res.json({ matches: getRecentMatches(uuid, limit), total: undefined });
+  }
+  if (player) {
+    return res.json({
+      matches: getMatchesByPlayerName(player, limit, offset),
+      total: getMatchCount(player),
+    });
+  }
+  return res.json({ matches: getAllMatches(limit, offset), total: getMatchCount() });
+});
+app.get("/api/matches/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
+  const row = getMatchById(id);
+  if (!row) return res.status(404).json({ error: "not_found" });
+  res.json(row);
+});
+app.get("/api/players/search", (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  if (!q) return res.json({ players: [] });
+  const limit = Number(req.query.limit ?? 50);
+  res.json({ players: searchPlayersByName(q, limit) });
+});
+app.get("/api/players/:uuid", (req, res) => {
+  const row = getPlayer(req.params.uuid);
+  if (!row) return res.status(404).json({ error: "not_found" });
+  res.json(row);
+});
+app.get("/api/rooms", (_req, res) => {
+  res.json({ rooms: rooms.listActive() });
 });
 
 // Spectator-only HTTP server. Serves the same static files + /api/missions but no WS.

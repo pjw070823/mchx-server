@@ -125,6 +125,22 @@ const matchesByPlayerStmt: StatementSync = db.prepare(
    WHERE player_a_uuid = ? OR player_b_uuid = ?
    ORDER BY ended_at DESC LIMIT ?`,
 );
+const matchesAllStmt: StatementSync = db.prepare(
+  `SELECT * FROM matches ORDER BY ended_at DESC LIMIT ? OFFSET ?`,
+);
+const matchesByNameStmt: StatementSync = db.prepare(
+  `SELECT * FROM matches
+   WHERE player_a_name LIKE ? OR player_b_name LIKE ?
+   ORDER BY ended_at DESC LIMIT ? OFFSET ?`,
+);
+const matchByIdStmt: StatementSync = db.prepare(`SELECT * FROM matches WHERE id = ?`);
+const matchCountStmt: StatementSync = db.prepare(`SELECT COUNT(*) AS c FROM matches`);
+const matchCountByNameStmt: StatementSync = db.prepare(
+  `SELECT COUNT(*) AS c FROM matches WHERE player_a_name LIKE ? OR player_b_name LIKE ?`,
+);
+const searchPlayersStmt: StatementSync = db.prepare(
+  `SELECT * FROM players WHERE name LIKE ? ORDER BY elo DESC LIMIT ?`,
+);
 
 export function getOrCreatePlayer(uuid: string, name: string): PlayerRow {
   const row = getPlayerStmt.get(uuid) as unknown as PlayerRow | undefined;
@@ -200,4 +216,35 @@ export function recordMatch(m: NewMatchRow): void {
 
 export function getRecentMatches(uuid: string, limit: number): MatchRow[] {
   return matchesByPlayerStmt.all(uuid, uuid, Math.max(1, Math.min(100, limit))) as unknown as MatchRow[];
+}
+
+export function getAllMatches(limit: number, offset: number): MatchRow[] {
+  const lim = Math.max(1, Math.min(100, limit));
+  const off = Math.max(0, offset);
+  return matchesAllStmt.all(lim, off) as unknown as MatchRow[];
+}
+
+export function getMatchesByPlayerName(name: string, limit: number, offset: number): MatchRow[] {
+  const lim = Math.max(1, Math.min(100, limit));
+  const off = Math.max(0, offset);
+  const pattern = `%${name}%`;
+  return matchesByNameStmt.all(pattern, pattern, lim, off) as unknown as MatchRow[];
+}
+
+export function getMatchById(id: number): MatchRow | undefined {
+  return matchByIdStmt.get(id) as unknown as MatchRow | undefined;
+}
+
+export function getMatchCount(playerName?: string): number {
+  if (playerName) {
+    const pattern = `%${playerName}%`;
+    const row = matchCountByNameStmt.get(pattern, pattern) as unknown as { c: number };
+    return row.c;
+  }
+  const row = matchCountStmt.get() as unknown as { c: number };
+  return row.c;
+}
+
+export function searchPlayersByName(query: string, limit: number): PlayerRow[] {
+  return searchPlayersStmt.all(`%${query}%`, Math.max(1, Math.min(100, limit))) as unknown as PlayerRow[];
 }

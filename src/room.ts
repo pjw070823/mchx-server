@@ -66,6 +66,25 @@ export class Room {
     return this.settings.gameMode === "2v2" ? 4 : 2;
   }
 
+  /** Snapshot used by the public /api/rooms listing. No ws references, safe to serialise. */
+  summary(): RoomSummary {
+    return {
+      code: this.code,
+      status: this.status,
+      capacity: this.requiredPlayers(),
+      settings: this.settings,
+      hostId: this.hostId,
+      players: [...this.players.values()].map((p) => ({
+        id: p.id,
+        name: p.name,
+        side: p.side,
+        uuid: p.uuid,
+        elo: p.elo,
+        isHost: p.id === this.hostId,
+      })),
+    };
+  }
+
   isReadyToStart(): boolean {
     return this.status === "waiting" && this.players.size === this.requiredPlayers();
   }
@@ -132,6 +151,13 @@ export class Room {
     if (partial.inventorySave != null) next.inventorySave = partial.inventorySave;
     if (partial.saturation != null) next.saturation = partial.saturation;
     if (partial.rated != null) next.rated = partial.rated;
+    // Ranked matches must use the canonical ruleset — force the perk toggles off when
+    // rated is enabled (both at the moment rated is turned on and as a safety check on
+    // any settings change while it's already on).
+    if (next.rated) {
+      next.inventorySave = false;
+      next.saturation = false;
+    }
     this.settings = next;
     return true;
   }
@@ -382,6 +408,22 @@ function randomSeed64(): bigint {
   return BigInt.asIntN(64, (hi << 32n) | lo);
 }
 
+export interface RoomSummary {
+  code: string;
+  status: RoomStatus;
+  capacity: number;
+  settings: RoomSettings;
+  hostId: string | null;
+  players: Array<{
+    id: string;
+    name: string;
+    side: Side | null;
+    uuid: string | null;
+    elo: number;
+    isHost: boolean;
+  }>;
+}
+
 export class RoomRegistry {
   private readonly rooms = new Map<string, Room>();
 
@@ -402,5 +444,12 @@ export class RoomRegistry {
 
   delete(code: string): void {
     this.rooms.delete(code);
+  }
+
+  /** Active rooms (status != ended) for the public listing on the web home page. */
+  listActive(): RoomSummary[] {
+    return [...this.rooms.values()]
+      .filter((r) => r.status !== "ended")
+      .map((r) => r.summary());
   }
 }

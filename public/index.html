@@ -3,62 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Minecraft Hex — 관전자 보드</title>
+    <title>Minecraft Hex</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header>
-      <h1>Minecraft Hex</h1>
-      <form id="join">
-        <input id="code" maxlength="4" placeholder="방 코드 (예: AB23)" autocomplete="off" />
-        <button type="submit">관전</button>
-      </form>
+    <header class="site-header">
+      <a href="#/" class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-text">Minecraft Hex</span>
+      </a>
+      <nav id="nav" class="tabs">
+        <a href="#/" data-route="home">홈</a>
+        <a href="#/leaderboard" data-route="leaderboard">리더보드</a>
+        <a href="#/matches" data-route="matches">경기 기록</a>
+        <a href="#/players" data-route="players">유저 검색</a>
+      </nav>
     </header>
 
-    <main>
-      <section id="status">
-        <span id="conn-state">연결 대기</span>
-        <span id="room-info"></span>
-        <span id="match-state"></span>
-      </section>
+    <main id="view" class="view"></main>
 
-      <section id="players">
-        <div class="player side-a" data-side="A" title="클릭하면 내 진영으로 지정">
-          <span class="badge">A</span>
-          <span class="name" data-bind="player-a">—</span>
-          <span class="me-badge">나</span>
-          <span class="claimed" data-bind="claimed-a">0</span>
-        </div>
-        <div class="player side-b" data-side="B" title="클릭하면 내 진영으로 지정">
-          <span class="badge">B</span>
-          <span class="name" data-bind="player-b">—</span>
-          <span class="me-badge">나</span>
-          <span class="claimed" data-bind="claimed-b">0</span>
-        </div>
-        <div id="legend">
-          <div class="legend-row">
-            <span class="chip easy">Easy</span>
-            <span class="chip medium">Medium</span>
-            <span class="chip hard">Hard</span>
-          </div>
-          <div class="legend-row">
-            <span class="chip claimed-a">A 점유</span>
-            <span class="chip claimed-b">B 점유</span>
-          </div>
-        </div>
-      </section>
+    <footer class="site-footer">
+      <span>mchx · 1v1 미션 레이스</span>
+    </footer>
 
-      <section id="board-wrap">
-        <svg id="board" viewBox="-300 -200 600 400" preserveAspectRatio="xMidYMid meet"></svg>
-        <div id="hex-tooltip" class="hex-tooltip"></div>
-      </section>
-
-      <section id="claim-log">
-        <h3>최근 클레임</h3>
-        <ol id="log"></ol>
-      </section>
-    </main>
-
-    <script type="module" src="/board.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>
