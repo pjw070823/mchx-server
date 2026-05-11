@@ -127,6 +127,12 @@ function handleClientMessage(
       return;
     }
 
+    case "world_ready": {
+      if (!state.room || state.isSpectator) return;
+      state.room.markReady(state.playerId);
+      return;
+    }
+
     case "spectate": {
       if (state.room) return sendError(ws, "already_in_room", "leave first");
       const room = rooms.get(msg.roomCode);

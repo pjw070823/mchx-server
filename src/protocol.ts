@@ -73,6 +73,9 @@ export const ClientMessage = z.discriminatedUnion("type", [
     type: z.literal("start_match"),
   }),
   z.object({
+    type: z.literal("world_ready"),
+  }),
+  z.object({
     type: z.literal("claim"),
     tileId: TileId,
     missionId: z.string(),
@@ -118,6 +121,10 @@ export const ServerMessage = z.discriminatedUnion("type", [
     board: z.array(BoardTile),
     claimed: z.array(ClaimedTile),
     settings: RoomSettings,
+    startsAt: z.number().int(),
+  }),
+  z.object({
+    type: z.literal("countdown_start"),
     startsAt: z.number().int(),
   }),
   z.object({

@@ -36,6 +36,8 @@ export class Room {
   private readonly claimedMap = new Map<TileId, Side>();
   private readonly claimedLog: ClaimedTile[] = [];
   private startedAt: number | null = null;
+  private readonly readyPlayers = new Set<string>();
+  private matchActiveAt: number | null = null;
 
   constructor() {
     this.code = newRoomCode();
@@ -110,8 +112,26 @@ export class Room {
     this.board = buildBoard(rand);
     this.startedAt = Date.now() + 3000;
     this.status = "playing";
+    this.readyPlayers.clear();
+    this.matchActiveAt = null;
     for (const p of this.players.values()) this.sendMatchSnapshot(p.ws, p);
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
+  }
+
+  /**
+   * Called when a client finishes loading its singleplayer world. Once every player has
+   * reported ready, we schedule the countdown (3s) and broadcast the active-at time.
+   */
+  markReady(playerId: string): void {
+    if (this.status !== "playing" || !this.board) return;
+    if (!this.players.has(playerId)) return;
+    if (this.matchActiveAt !== null) return; // countdown already scheduled
+    this.readyPlayers.add(playerId);
+    if (this.readyPlayers.size >= this.players.size) {
+      const startsAt = Date.now() + 3000;
+      this.matchActiveAt = startsAt;
+      this.broadcast({ type: "countdown_start", startsAt });
+    }
   }
 
   broadcastChat(playerId: string, text: string): void {
@@ -154,6 +174,10 @@ export class Room {
       this.send(player.ws, {
         type: "claim_rejected", tileId, reason: "match_not_active",
       });
+      return;
+    }
+    if (this.matchActiveAt === null || Date.now() < this.matchActiveAt) {
+      this.send(player.ws, { type: "claim_rejected", tileId, reason: "countdown" });
       return;
     }
     const tile = this.board.find((t) => t.tileId === tileId);
