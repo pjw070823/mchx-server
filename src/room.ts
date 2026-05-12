@@ -151,13 +151,9 @@ export class Room {
     if (partial.inventorySave != null) next.inventorySave = partial.inventorySave;
     if (partial.saturation != null) next.saturation = partial.saturation;
     if (partial.rated != null) next.rated = partial.rated;
-    // Ranked matches must use the canonical ruleset — force the perk toggles off when
-    // rated is enabled (both at the moment rated is turned on and as a safety check on
-    // any settings change while it's already on).
-    if (next.rated) {
-      next.inventorySave = false;
-      next.saturation = false;
-    }
+    // No coupling between `rated` and the perk toggles — the host can freely combine
+    // any of them. Ranked matches with non-default perks are still rated; record-keeping
+    // captures the actual settings used so the leaderboard remains comparable per-room.
     this.settings = next;
     return true;
   }
