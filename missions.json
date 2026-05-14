@@ -157,11 +157,17 @@
       "displayName": "아무 물약 1개",
       "difficulty": "hard",
       "detector": {
-        "type": "inventory_any_of",
+        "type": "inventory_potion",
         "items": [
           "minecraft:potion",
           "minecraft:splash_potion",
           "minecraft:lingering_potion"
+        ],
+        "excludePotions": [
+          "minecraft:water",
+          "minecraft:awkward",
+          "minecraft:mundane",
+          "minecraft:thick"
         ],
         "totalCount": 1
       }
