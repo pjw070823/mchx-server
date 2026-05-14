@@ -45,14 +45,6 @@ const RATE_BUCKET_REFILL_PER_SEC = 20;
 const SPECTATE_FAIL_THRESHOLD = 5;
 const SPECTATE_FAIL_BACKOFF_MS = 30_000;
 
-/** H8: allowed Origin values for browser-served WS connections. The mod's
- *  Java HttpClient doesn't send Origin, so empty/missing is also accepted. */
-const ALLOWED_ORIGIN_HOSTS = new Set<string>([
-  "localhost",
-  "127.0.0.1",
-  "115.68.228.116",
-]);
-
 /** UUID validation regex (M1). */
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -166,16 +158,21 @@ const wss = new WebSocketServer({
   maxPayload: MAX_WS_PAYLOAD, // H6
   verifyClient: (info, cb) => {
     // H8: reject cross-site WS hijacking. The mod's Java HttpClient sends no
-    // Origin header (allowed). Browsers send Origin = the page's origin; only
-    // pages from our own host are permitted, blocking malicious sites from
-    // opening sockets in a visiting player's name.
+    // Origin header (allowed). Browsers send Origin = the page's origin;
+    // we allow it iff its hostname matches the Host header's hostname — i.e.
+    // the browser is loading from the same machine it's targeting. This auto-
+    // adapts to whatever address the server is reachable on (localhost, LAN
+    // IP, public IP, DNS name) without needing a hardcoded allowlist, and
+    // still blocks the textbook CSWSH attack (page on evil.com → WS to us:
+    // Origin host ≠ our Host).
     const origin = info.req.headers.origin;
     if (!origin) return cb(true);
     try {
-      const host = new URL(origin).hostname;
-      if (ALLOWED_ORIGIN_HOSTS.has(host)) return cb(true);
-      console.warn(`[ws] rejected origin: ${origin}`);
-      return cb(false, 403, "origin_not_allowed");
+      const originHost = new URL(origin).hostname.toLowerCase();
+      const reqHost = (info.req.headers.host ?? "").split(":")[0].toLowerCase();
+      if (originHost && originHost === reqHost) return cb(true);
+      console.warn(`[ws] rejected origin: ${origin} (req host=${info.req.headers.host})`);
+      return cb(false, 403, "origin_mismatch");
     } catch {
       return cb(false, 400, "bad_origin");
     }
