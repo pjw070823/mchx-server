@@ -110,15 +110,20 @@ async function renderHome() {
 }
 
 function roomCard(room) {
+  // L2: every DB- or protocol-sourced field is escaped before going into HTML.
+  // Numeric / enum-constrained fields are still escaped via numEsc/sideClass
+  // helpers so an upstream type drift can't silently become XSS.
   const ratedTag = room.settings?.rated ? `<span class="tag tag-rated">랭크</span>` : "";
+  const safeCode = escapeHtml(String(room.code ?? ""));
   const players = (room.players ?? []).map((p) => {
     const sideCls = p.side === "A" ? "side-a" : "side-b";
+    const elo = numEsc(p.elo);
     return `
       <div class="rcard-player ${sideCls}">
         <img src="${avatarUrl(p.uuid, 32)}" alt="" class="avatar-32" loading="lazy" />
         <div class="rcard-pname">
-          <span class="name">${escapeHtml(p.name)}</span>
-          <span class="sub">${p.side} · ELO ${p.elo ?? "—"}${p.isHost ? " · 방장" : ""}</span>
+          <span class="name">${escapeHtml(p.name ?? "")}</span>
+          <span class="sub">${escapeHtml(p.side ?? "")} · ELO ${elo}${p.isHost ? " · 방장" : ""}</span>
         </div>
       </div>
     `;
@@ -126,9 +131,9 @@ function roomCard(room) {
   const empty = (room.players?.length ?? 0) < room.capacity ?
     `<div class="rcard-player empty-slot">빈 자리</div>` : "";
   return `
-    <a class="room-card" href="#/board/${room.code}">
+    <a class="room-card" href="#/board/${encodeURIComponent(room.code ?? "")}">
       <div class="rcard-head">
-        <span class="rcard-code">${room.code}</span>
+        <span class="rcard-code">${safeCode}</span>
         ${statusBadge(room.status)}
         ${ratedTag}
       </div>
@@ -139,6 +144,13 @@ function roomCard(room) {
       <div class="rcard-spec">관전 →</div>
     </a>
   `;
+}
+
+/** Render a value that *should* be a number, but escape it as HTML defensively
+ *  in case upstream sends a string with markup. Returns "—" for null/undefined. */
+function numEsc(v) {
+  if (v == null) return "—";
+  return escapeHtml(String(v));
 }
 
 // ---- view: LEADERBOARD ------------------------------------------------------
@@ -170,14 +182,14 @@ async function renderLeaderboard() {
                   <tr>
                     <td class="rank">${i + 1}</td>
                     <td>
-                      <a class="player-link" href="#/players/${encodeURIComponent(p.uuid)}">
+                      <a class="player-link" href="#/players/${encodeURIComponent(p.uuid ?? "")}">
                         <img src="${avatarUrl(p.uuid, 28)}" alt="" class="avatar-28" loading="lazy" />
-                        <span>${escapeHtml(p.name)}</span>
+                        <span>${escapeHtml(p.name ?? "")}</span>
                       </a>
                     </td>
-                    <td class="num elo">${p.elo}</td>
-                    <td class="num">${p.wins}승 ${p.losses}패 ${p.draws}무</td>
-                    <td class="num">${winrate(p.wins, p.losses, p.draws)}</td>
+                    <td class="num elo">${numEsc(p.elo)}</td>
+                    <td class="num">${numEsc(p.wins)}승 ${numEsc(p.losses)}패 ${numEsc(p.draws)}무</td>
+                    <td class="num">${escapeHtml(winrate(p.wins, p.losses, p.draws))}</td>
                   </tr>
                 `).join("")}
               </tbody>
@@ -252,11 +264,17 @@ function matchListItem(m) {
   const bEloDelta = (m.player_b_elo_before != null && m.player_b_elo_after != null)
     ? (m.player_b_elo_after - m.player_b_elo_before) : null;
 
+  // L2: winner is a TEXT column server-side with no DB-level constraint to "A"|"B".
+  // Defend by treating it as untrusted: derive the class from a strict allow-list,
+  // and escape the display text.
+  const winnerCls = winner === "A" ? "winner-a" : winner === "B" ? "winner-b" : "winner-draw";
+  const winnerLabel = winner === "A" ? "A 승리" : winner === "B" ? "B 승리" : "무승부";
+  const safeId = Number.isInteger(m.id) ? m.id : 0;
   return `
     <li class="match-row">
-      <a class="match-link" href="#/matches/${m.id}">
+      <a class="match-link" href="#/matches/${safeId}">
         <div class="match-time">
-          ${fmtDate(m.ended_at)}
+          ${escapeHtml(fmtDate(m.ended_at))}
           ${ratedTag}
         </div>
         <div class="match-vs">
@@ -273,9 +291,7 @@ function matchListItem(m) {
           </div>
         </div>
         <div class="match-outcome">
-          ${winner
-            ? `<span class="winner-tag winner-${winner.toLowerCase()}">${winner} 승리</span>`
-            : `<span class="winner-tag winner-draw">무승부</span>`}
+          <span class="winner-tag ${winnerCls}">${winnerLabel}</span>
           <span class="reason">${escapeHtml(m.reason ?? "")}</span>
         </div>
       </a>
@@ -287,7 +303,7 @@ function eloDeltaPill(delta, after) {
   if (delta == null) return `<span class="elo-pill">—</span>`;
   const sign = delta > 0 ? "+" : "";
   const cls = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
-  return `<span class="elo-pill ${cls}">${after} (${sign}${delta})</span>`;
+  return `<span class="elo-pill ${cls}">${numEsc(after)} (${sign}${numEsc(delta)})</span>`;
 }
 
 function paginationControls(offset, limit, total, player) {
@@ -330,21 +346,27 @@ async function renderMatchDetail(id) {
     let caClaimed = 0, cbClaimed = 0;
     for (const c of claimed) (c.side === "A" ? caClaimed++ : cbClaimed++);
 
+    // L2: defensive derivation of winner side; no DB-level constraint exists.
+    const winnerCls = match.winner_side === "A" ? "winner-a"
+      : match.winner_side === "B" ? "winner-b"
+      : "winner-draw";
+    const winnerLabel = match.winner_side === "A" ? "A 승리"
+      : match.winner_side === "B" ? "B 승리"
+      : "무승부";
+
     view.innerHTML = `
       <section class="page page-match-detail">
         <a class="back-link" href="#/matches">← 경기 기록</a>
 
         <div class="match-head">
           <div class="mh-meta">
-            <span class="match-id">#${match.id}</span>
+            <span class="match-id">#${numEsc(match.id)}</span>
             ${match.rated ? `<span class="tag tag-rated">랭크</span>` : `<span class="tag">캐주얼</span>`}
-            <span class="sub">${fmtDate(match.ended_at)}</span>
-            ${match.started_at ? `<span class="sub">· ${fmtDuration(match.started_at, match.ended_at)}</span>` : ""}
+            <span class="sub">${escapeHtml(fmtDate(match.ended_at))}</span>
+            ${match.started_at ? `<span class="sub">· ${escapeHtml(fmtDuration(match.started_at, match.ended_at))}</span>` : ""}
           </div>
           <div class="mh-result">
-            ${match.winner_side
-              ? `<span class="winner-tag winner-${match.winner_side.toLowerCase()}">${match.winner_side} 승리</span>`
-              : `<span class="winner-tag winner-draw">무승부</span>`}
+            <span class="winner-tag ${winnerCls}">${winnerLabel}</span>
             <span class="reason">${escapeHtml(match.reason ?? "")}</span>
           </div>
         </div>
@@ -363,7 +385,7 @@ async function renderMatchDetail(id) {
                   <img src="${bodyUrl(null, 96)}" alt="" class="body-96" />
                   <div><div class="vs-name">—</div></div>
                 </div>`}
-            <div class="claim-count">${caClaimed}칸</div>
+            <div class="claim-count">${numEsc(caClaimed)}칸</div>
           </div>
           <div class="vs-versus">vs</div>
           <div class="vs-side vs-b ${bWon ? "won" : ""}">
@@ -379,7 +401,7 @@ async function renderMatchDetail(id) {
                   <img src="${bodyUrl(null, 96)}" alt="" class="body-96" />
                   <div><div class="vs-name">—</div></div>
                 </div>`}
-            <div class="claim-count">${cbClaimed}칸</div>
+            <div class="claim-count">${numEsc(cbClaimed)}칸</div>
           </div>
         </div>
 
@@ -404,9 +426,14 @@ async function renderMatchDetail(id) {
                 .sort((a, b) => a.claimedAt - b.claimedAt)
                 .map((c) => {
                   const mname = missions.get(c.missionId)?.displayName ?? c.missionId;
-                  return `<li class="side-${c.side.toLowerCase()}">
-                    <span class="time">${new Date(c.claimedAt).toLocaleTimeString("ko-KR", { hour12: false })}</span>
-                    <span class="side-tag">[${c.side}]</span>
+                  // L2: `c.side` is derived from claimed_json which is server-controlled,
+                  // but defending against future code paths writing arbitrary text:
+                  const sideCls = c.side === "A" ? "side-a" : c.side === "B" ? "side-b" : "";
+                  const sideLabel = c.side === "A" ? "A" : c.side === "B" ? "B" : "?";
+                  const timeStr = new Date(c.claimedAt).toLocaleTimeString("ko-KR", { hour12: false });
+                  return `<li class="${sideCls}">
+                    <span class="time">${escapeHtml(timeStr)}</span>
+                    <span class="side-tag">[${sideLabel}]</span>
                     <span>${escapeHtml(mname)}</span>
                   </li>`;
                 }).join("")}
@@ -427,9 +454,14 @@ async function renderMatchDetail(id) {
         const m = missions.get(tile.missionId);
         const name = m?.displayName ?? tile.missionId;
         const claim = claimed.find((c) => c.tileId === tileId);
-        const claimInfo = claim ? `<span class="claim-info">[${claim.side} 점유]</span>` : "";
+        // L2: claim.side is server-controlled but harden against future drift.
+        const claimSide = claim?.side === "A" || claim?.side === "B" ? claim.side : null;
+        const claimInfo = claimSide ? `<span class="claim-info">[${claimSide} 점유]</span>` : "";
+        // tile.difficulty is enum-bounded (easy/medium/hard) per Zod, but escape
+        // the class and contents anyway to make this future-proof.
+        const diffSafe = ["easy", "medium", "hard"].includes(tile.difficulty) ? tile.difficulty : "easy";
         tooltipEl.innerHTML =
-          `<span class="difficulty ${tile.difficulty}">${tile.difficulty.toUpperCase()}</span>` +
+          `<span class="difficulty ${diffSafe}">${escapeHtml(diffSafe.toUpperCase())}</span>` +
           `${escapeHtml(name)}${claimInfo}`;
         const rect = wrapEl.getBoundingClientRect();
         tooltipEl.style.left = `${ev.clientX - rect.left + 12}px`;
@@ -445,11 +477,11 @@ async function renderMatchDetail(id) {
 
 function eloLine(before, after, delta) {
   if (after == null) return `<div class="sub">ELO 비반영</div>`;
-  if (delta == null) return `<div class="sub">ELO ${after}</div>`;
+  if (delta == null) return `<div class="sub">ELO ${numEsc(after)}</div>`;
   const cls = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
   const sign = delta > 0 ? "+" : "";
-  return `<div class="sub">ELO ${before} → <strong>${after}</strong>
-            <span class="elo-delta ${cls}">${sign}${delta}</span></div>`;
+  return `<div class="sub">ELO ${numEsc(before)} → <strong>${numEsc(after)}</strong>
+            <span class="elo-delta ${cls}">${sign}${numEsc(delta)}</span></div>`;
 }
 
 // ---- view: PLAYER SEARCH ----------------------------------------------------
@@ -499,14 +531,14 @@ async function renderPlayerSearch() {
           ${players.map((p) => `
             <tr>
               <td>
-                <a class="player-link" href="#/players/${encodeURIComponent(p.uuid)}">
+                <a class="player-link" href="#/players/${encodeURIComponent(p.uuid ?? "")}">
                   <img src="${avatarUrl(p.uuid, 28)}" alt="" class="avatar-28" loading="lazy" />
-                  <span>${escapeHtml(p.name)}</span>
+                  <span>${escapeHtml(p.name ?? "")}</span>
                 </a>
               </td>
-              <td class="num elo">${p.elo}</td>
-              <td class="num">${p.wins}승 ${p.losses}패 ${p.draws}무</td>
-              <td class="num">${winrate(p.wins, p.losses, p.draws)}</td>
+              <td class="num elo">${numEsc(p.elo)}</td>
+              <td class="num">${numEsc(p.wins)}승 ${numEsc(p.losses)}패 ${numEsc(p.draws)}무</td>
+              <td class="num">${escapeHtml(winrate(p.wins, p.losses, p.draws))}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -549,23 +581,23 @@ async function renderPlayerDetail(uuid) {
         <div class="player-head">
           <img src="${bodyUrl(player.uuid, 160)}" alt="" class="body-160" loading="lazy" />
           <div class="ph-info">
-            <h1>${escapeHtml(player.name)}</h1>
-            <div class="ph-uuid mono">${escapeHtml(player.uuid)}</div>
+            <h1>${escapeHtml(player.name ?? "")}</h1>
+            <div class="ph-uuid mono">${escapeHtml(player.uuid ?? "")}</div>
             <div class="ph-stats">
               <div class="stat">
-                <div class="stat-num">${player.elo}</div>
+                <div class="stat-num">${numEsc(player.elo)}</div>
                 <div class="stat-label">현재 ELO</div>
               </div>
               <div class="stat">
-                <div class="stat-num">${player.games_played}</div>
+                <div class="stat-num">${numEsc(player.games_played)}</div>
                 <div class="stat-label">경기 수</div>
               </div>
               <div class="stat">
-                <div class="stat-num">${player.wins}–${player.losses}–${player.draws}</div>
+                <div class="stat-num">${numEsc(player.wins)}–${numEsc(player.losses)}–${numEsc(player.draws)}</div>
                 <div class="stat-label">승–패–무</div>
               </div>
               <div class="stat">
-                <div class="stat-num">${winrate(player.wins, player.losses, player.draws)}</div>
+                <div class="stat-num">${escapeHtml(winrate(player.wins, player.losses, player.draws))}</div>
                 <div class="stat-label">승률</div>
               </div>
             </div>

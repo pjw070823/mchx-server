@@ -3,15 +3,55 @@
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, relative, isAbsolute } from "node:path";
 
 export const DEFAULT_ELO = 500;
 
 const DB_PATH = resolve(process.env.MCHX_DB_PATH ?? "./data/mchx.sqlite");
 
+// L3: prevent `MCHX_DB_PATH=../../../etc/foo.sqlite` style escapes that would
+// place the SQLite file outside the project tree. Allow absolute paths (admins
+// may legitimately point at e.g. `/var/lib/mchx/data.sqlite`) but reject any
+// relative path that resolves outside cwd.
+{
+  const fromEnv = process.env.MCHX_DB_PATH;
+  if (fromEnv && !isAbsolute(fromEnv)) {
+    const rel = relative(process.cwd(), DB_PATH);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      throw new Error(
+        `MCHX_DB_PATH '${fromEnv}' resolves outside cwd (${DB_PATH}); ` +
+        "use an absolute path if this was intentional.",
+      );
+    }
+  }
+}
+
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 const db: DatabaseSync = new DatabaseSync(DB_PATH);
+
+/**
+ * Escape SQL LIKE wildcards so user-supplied search terms are treated as literal
+ * substrings. Without this, a malicious `%a%b%c%d%e%` triggers worst-case scans
+ * across the whole table — `node:sqlite` is synchronous, so a single slow query
+ * stalls the entire event loop. Used together with `LIKE ? ESCAPE '\\'`.
+ */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, "\\$&");
+}
+
+/** Run `fn` inside a transaction; rollback on any throw. Idempotent for nested calls (no-op). */
+export function inTransaction<T>(fn: () => T): T {
+  db.exec("BEGIN");
+  try {
+    const out = fn();
+    db.exec("COMMIT");
+    return out;
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    throw err;
+  }
+}
 
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -130,16 +170,16 @@ const matchesAllStmt: StatementSync = db.prepare(
 );
 const matchesByNameStmt: StatementSync = db.prepare(
   `SELECT * FROM matches
-   WHERE player_a_name LIKE ? OR player_b_name LIKE ?
+   WHERE player_a_name LIKE ? ESCAPE '\\' OR player_b_name LIKE ? ESCAPE '\\'
    ORDER BY ended_at DESC LIMIT ? OFFSET ?`,
 );
 const matchByIdStmt: StatementSync = db.prepare(`SELECT * FROM matches WHERE id = ?`);
 const matchCountStmt: StatementSync = db.prepare(`SELECT COUNT(*) AS c FROM matches`);
 const matchCountByNameStmt: StatementSync = db.prepare(
-  `SELECT COUNT(*) AS c FROM matches WHERE player_a_name LIKE ? OR player_b_name LIKE ?`,
+  `SELECT COUNT(*) AS c FROM matches WHERE player_a_name LIKE ? ESCAPE '\\' OR player_b_name LIKE ? ESCAPE '\\'`,
 );
 const searchPlayersStmt: StatementSync = db.prepare(
-  `SELECT * FROM players WHERE name LIKE ? ORDER BY elo DESC LIMIT ?`,
+  `SELECT * FROM players WHERE name LIKE ? ESCAPE '\\' ORDER BY elo DESC LIMIT ?`,
 );
 
 export function getOrCreatePlayer(uuid: string, name: string): PlayerRow {
@@ -227,7 +267,10 @@ export function getAllMatches(limit: number, offset: number): MatchRow[] {
 export function getMatchesByPlayerName(name: string, limit: number, offset: number): MatchRow[] {
   const lim = Math.max(1, Math.min(100, limit));
   const off = Math.max(0, offset);
-  const pattern = `%${name}%`;
+  // Trim + cap user input before building the pattern. `escapeLike` neutralises
+  // SQL wildcards so the user's `%` / `_` are matched literally.
+  const safeName = name.trim().slice(0, 64);
+  const pattern = `%${escapeLike(safeName)}%`;
   return matchesByNameStmt.all(pattern, pattern, lim, off) as unknown as MatchRow[];
 }
 
@@ -237,7 +280,8 @@ export function getMatchById(id: number): MatchRow | undefined {
 
 export function getMatchCount(playerName?: string): number {
   if (playerName) {
-    const pattern = `%${playerName}%`;
+    const safeName = playerName.trim().slice(0, 64);
+    const pattern = `%${escapeLike(safeName)}%`;
     const row = matchCountByNameStmt.get(pattern, pattern) as unknown as { c: number };
     return row.c;
   }
@@ -246,5 +290,7 @@ export function getMatchCount(playerName?: string): number {
 }
 
 export function searchPlayersByName(query: string, limit: number): PlayerRow[] {
-  return searchPlayersStmt.all(`%${query}%`, Math.max(1, Math.min(100, limit))) as unknown as PlayerRow[];
+  const safe = query.trim().slice(0, 64);
+  const pattern = `%${escapeLike(safe)}%`;
+  return searchPlayersStmt.all(pattern, Math.max(1, Math.min(100, limit))) as unknown as PlayerRow[];
 }
