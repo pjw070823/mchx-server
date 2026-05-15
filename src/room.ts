@@ -63,7 +63,8 @@ interface PlayerSession {
 
 export class Room {
   readonly code: string;
-  readonly seed: bigint;
+  /** Re-rolled on every beginMatch() so rematches use fresh maps. */
+  seed: bigint;
   status: RoomStatus = "waiting";
   hostId: string | null = null;
   settings: RoomSettings = { ...DEFAULT_SETTINGS };
@@ -136,7 +137,11 @@ export class Room {
   }
 
   isReadyToStart(): boolean {
-    return this.status === "waiting" && this.players.size === this.requiredPlayers();
+    // Allow start from both `waiting` (first match in this room) and `ended`
+    // (rematch in the same room). `playing`/`starting` is a no-op so the host
+    // can't double-start mid-match.
+    if (this.status !== "waiting" && this.status !== "ended") return false;
+    return this.players.size === this.requiredPlayers();
   }
 
   addPlayer(
@@ -346,13 +351,26 @@ export class Room {
   }
 
   private beginMatch(): void {
+    // Re-roll the seed each time so a rematch in the same room generates a
+    // fresh world (otherwise both clients would re-create the SAME terrain and
+    // hit name conflicts on disk).
+    this.seed = randomSeed64();
     const rand = mulberry32(Number(this.seed & 0xffffffffn));
     this.board = buildBoard(rand);
+    this.claimedMap.clear();
+    this.claimedLog.length = 0;
     this.startedAt = Date.now();
     this.status = "playing";
     this.readyPlayers.clear();
     this.matchActiveAt = null;
     this.matchSettled = false;
+    // Reset per-player session match flags so the anti-rapid-fire gate and
+    // disconnect grace don't carry over from the previous match.
+    for (const p of this.players.values()) {
+      p.lastClaimAt = null;
+      p.disconnectedAt = null;
+      if (p.forfeitTimer) { clearTimeout(p.forfeitTimer); p.forfeitTimer = null; }
+    }
     for (const p of this.players.values()) this.sendMatchSnapshot(p.ws, p);
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
   }
@@ -363,7 +381,9 @@ export class Room {
     if (this.matchActiveAt !== null) return;
     this.readyPlayers.add(playerId);
     if (this.readyPlayers.size >= this.players.size) {
-      const startsAt = Date.now() + 3000;
+      // 5s pre-match countdown — gives both players time to settle in the
+      // freshly-loaded world before claims can start firing.
+      const startsAt = Date.now() + 5000;
       this.matchActiveAt = startsAt;
       this.broadcast({ type: "countdown_start", startsAt });
     }

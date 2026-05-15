@@ -169,7 +169,7 @@ const wss = new WebSocketServer({
     if (!origin) return cb(true);
     try {
       const originHost = new URL(origin).hostname.toLowerCase();
-      const reqHost = (info.req.headers.host ?? "").split(":")[0].toLowerCase();
+      const reqHost = (info.req.headers.host ?? "").split(":")[0]?.toLowerCase() ?? "";
       if (originHost && originHost === reqHost) return cb(true);
       console.warn(`[ws] rejected origin: ${origin} (req host=${info.req.headers.host})`);
       return cb(false, 403, "origin_mismatch");
