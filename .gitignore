@@ -1,3 +1,10 @@
 /node_modules
-/data
 /.claude
+
+# Defense in depth: the DB now lives outside the git tree (../data/), but if
+# anyone ever sets MCHX_DB_PATH to a file inside server/, these still catch it.
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.db

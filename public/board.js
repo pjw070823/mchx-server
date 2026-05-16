@@ -138,6 +138,12 @@ export function renderBoardSvg(svgEl, { board, claimed, missions, onHover, onLea
   svgEl.innerHTML = "";
   svgEl.setAttribute("viewBox", "-300 -200 600 400");
   svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+  // No board yet (room is still in `waiting` state): leave the SVG empty so the
+  // A/B boundary outlines don't show up before there are any tiles. They render
+  // together once match_start arrives.
+  if (!board || board.length === 0) return;
+
   drawBoundary(svgEl);
 
   const claimedMap = new Map();

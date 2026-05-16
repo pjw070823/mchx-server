@@ -3,28 +3,23 @@
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname, resolve, relative, isAbsolute } from "node:path";
+import { dirname, resolve } from "node:path";
 
 export const DEFAULT_ELO = 500;
 
-const DB_PATH = resolve(process.env.MCHX_DB_PATH ?? "./data/mchx.sqlite");
-
-// L3: prevent `MCHX_DB_PATH=../../../etc/foo.sqlite` style escapes that would
-// place the SQLite file outside the project tree. Allow absolute paths (admins
-// may legitimately point at e.g. `/var/lib/mchx/data.sqlite`) but reject any
-// relative path that resolves outside cwd.
-{
-  const fromEnv = process.env.MCHX_DB_PATH;
-  if (fromEnv && !isAbsolute(fromEnv)) {
-    const rel = relative(process.cwd(), DB_PATH);
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      throw new Error(
-        `MCHX_DB_PATH '${fromEnv}' resolves outside cwd (${DB_PATH}); ` +
-        "use an absolute path if this was intentional.",
-      );
-    }
-  }
-}
+/**
+ * Default DB path is `../data/mchx.sqlite` — i.e. ONE LEVEL ABOVE the server's
+ * working directory. Combined with the fact that `.git` lives inside `server/`,
+ * this places the DB strictly outside the git tree so:
+ *   - `git pull`, `git checkout`, `git reset` can never touch it
+ *   - a stray `git add .` cannot accidentally start tracking it
+ *   - the dev tree layout maps naturally onto a prod layout where
+ *     `/opt/mchx/server/` is the deploy and `/opt/mchx/data/` is the DB
+ *
+ * Override with the `MCHX_DB_PATH` env var (absolute paths recommended for
+ * production — e.g. `/var/lib/mchx/mchx.sqlite`).
+ */
+const DB_PATH = resolve(process.env.MCHX_DB_PATH ?? "../data/mchx.sqlite");
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
