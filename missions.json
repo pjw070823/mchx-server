@@ -191,10 +191,10 @@
       "detector": { "type": "custom", "key": "boat_with_hostile" }
     },
     {
-      "id": "easy_die_arrow_self",
-      "displayName": "자기 자신을 활로 쏴맞혀 죽이기",
+      "id": "easy_self_arrow_hit",
+      "displayName": "자기 자신을 활로 쏴 맞히기",
       "difficulty": "easy",
-      "detector": { "type": "death_by", "source": "arrow_self" }
+      "detector": { "type": "custom", "key": "arrow_self_hit" }
     },
     {
       "id": "easy_breed_animal",
