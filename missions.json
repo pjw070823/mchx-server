@@ -95,6 +95,131 @@
         ]
       }
     },
+    {
+      "id": "easy_fall_survive_128",
+      "displayName": "128블럭 이상 떨어지고 살기",
+      "difficulty": "easy",
+      "detector": { "type": "custom", "key": "fall_survive_128" }
+    },
+    {
+      "id": "easy_jump_1000",
+      "displayName": "점프 횟수 1,000번",
+      "difficulty": "easy",
+      "detector": {
+        "type": "stat",
+        "statType": "minecraft:custom",
+        "statKey": "minecraft:jump",
+        "threshold": 1000
+      }
+    },
+    {
+      "id": "easy_die_lava",
+      "displayName": "용암에 타죽기",
+      "difficulty": "easy",
+      "detector": { "type": "death_by", "source": "lava" }
+    },
+    {
+      "id": "easy_bed_respawn",
+      "displayName": "침대에서 스폰하기",
+      "difficulty": "easy",
+      "detector": { "type": "custom", "key": "bed_respawn" }
+    },
+    {
+      "id": "easy_kill_villager",
+      "displayName": "주민 죽이기",
+      "difficulty": "easy",
+      "detector": {
+        "type": "stat",
+        "statType": "minecraft:killed",
+        "statKey": "minecraft:villager",
+        "threshold": 1
+      }
+    },
+    {
+      "id": "easy_glow_sign",
+      "displayName": "밝은 말 고운 말",
+      "difficulty": "easy",
+      "detector": { "type": "advancement", "id": "minecraft:husbandry/make_a_sign_glow" }
+    },
+    {
+      "id": "easy_dolphins_grace",
+      "displayName": "돌고래의 가호 받기",
+      "difficulty": "easy",
+      "detector": { "type": "active_effect", "effect": "minecraft:dolphins_grace" }
+    },
+    {
+      "id": "easy_patterned_banner",
+      "displayName": "무늬 있는 현수막 만들기",
+      "difficulty": "easy",
+      "detector": { "type": "custom", "key": "banner_with_pattern" }
+    },
+    {
+      "id": "easy_five_log_types",
+      "displayName": "나무 원목 5종",
+      "difficulty": "easy",
+      "detector": {
+        "type": "inventory_distinct",
+        "minDistinct": 5,
+        "candidates": [
+          "minecraft:oak_log",
+          "minecraft:birch_log",
+          "minecraft:spruce_log",
+          "minecraft:jungle_log",
+          "minecraft:acacia_log",
+          "minecraft:dark_oak_log",
+          "minecraft:mangrove_log",
+          "minecraft:cherry_log",
+          "minecraft:pale_oak_log"
+        ]
+      }
+    },
+    {
+      "id": "easy_minecart_20_blocks",
+      "displayName": "광산 수레 타고 20블록 움직이기",
+      "difficulty": "easy",
+      "detector": {
+        "type": "stat",
+        "statType": "minecraft:custom",
+        "statKey": "minecraft:minecart_one_cm",
+        "threshold": 2000
+      }
+    },
+    {
+      "id": "easy_boat_with_monster",
+      "displayName": "몬스터와 같은 보트에 타기",
+      "difficulty": "easy",
+      "detector": { "type": "custom", "key": "boat_with_hostile" }
+    },
+    {
+      "id": "easy_die_arrow_self",
+      "displayName": "자기 자신을 활로 쏴맞혀 죽이기",
+      "difficulty": "easy",
+      "detector": { "type": "death_by", "source": "arrow_self" }
+    },
+    {
+      "id": "easy_breed_animal",
+      "displayName": "아기는 어떻게 태어나?",
+      "difficulty": "easy",
+      "detector": { "type": "advancement", "id": "minecraft:husbandry/breed_an_animal" }
+    },
+    {
+      "id": "easy_age_lock_baby",
+      "displayName": "황금 민들레로 아기 유지시키기",
+      "difficulty": "easy",
+      "detector": { "type": "custom", "key": "age_lock_baby" }
+    },
+    {
+      "id": "easy_die_dripstone",
+      "displayName": "점적석에 찔려 죽기",
+      "difficulty": "easy",
+      "detector": { "type": "death_by", "source": "dripstone" }
+    },
+    {
+      "id": "easy_use_lodestone",
+      "displayName": "집으로 이끌려가네",
+      "difficulty": "easy",
+      "detector": { "type": "advancement", "id": "minecraft:adventure/use_lodestone" }
+    },
 
     {
       "id": "medium_axolotl",

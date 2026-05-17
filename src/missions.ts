@@ -39,6 +39,34 @@ const MissionDetector = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chest_distinct_27"),
   }),
+  // Vanilla statistic threshold. statType = StatType registry id
+  // (`minecraft:custom`, `minecraft:killed`, `minecraft:mined`, ...),
+  // statKey = the inner registry id (`minecraft:jump`, `minecraft:villager`, ...).
+  z.object({
+    type: z.literal("stat"),
+    statType: z.string(),
+    statKey: z.string(),
+    threshold: z.number().int().positive(),
+  }),
+  // Player died from a specific damage cause. `source` is interpreted on the
+  // mod side — currently understood values: "lava" | "dripstone" | "arrow_self".
+  z.object({
+    type: z.literal("death_by"),
+    source: z.string(),
+  }),
+  // Player currently has a given mob effect active (e.g. `minecraft:dolphins_grace`).
+  z.object({
+    type: z.literal("active_effect"),
+    effect: z.string(),
+  }),
+  // Bucket for one-off missions whose detection logic is hardcoded to a
+  // specific key in the mod (e.g. fall-and-survive, bed-respawn, baby age-lock,
+  // boat-with-monster, banner-with-pattern). Saves adding a typed detector for
+  // every one-shot mechanic.
+  z.object({
+    type: z.literal("custom"),
+    key: z.string(),
+  }),
 ]);
 export type MissionDetector = z.infer<typeof MissionDetector>;
 
@@ -96,11 +124,14 @@ function validateCounts(missions: Mission[]): void {
   const byDiff: Record<Difficulty, Mission[]> = { easy: [], medium: [], hard: [] };
   for (const m of missions) byDiff[m.difficulty].push(m);
 
-  const expected: Record<Difficulty, number> = { easy: 12, medium: 8, hard: 5 };
+  // Board has fixed slot counts per difficulty (5x5 = 12 easy + 8 medium + 5 hard).
+  // We require at least that many candidates in each tier; if there are MORE,
+  // `buildBoard` shuffles and picks a subset per match for variety.
+  const minRequired: Record<Difficulty, number> = { easy: 12, medium: 8, hard: 5 };
   for (const d of ["easy", "medium", "hard"] as const) {
-    if (byDiff[d].length !== expected[d]) {
+    if (byDiff[d].length < minRequired[d]) {
       throw new Error(
-        `missions.json: expected ${expected[d]} ${d} missions, got ${byDiff[d].length}`,
+        `missions.json: need at least ${minRequired[d]} ${d} missions, got ${byDiff[d].length}`,
       );
     }
   }

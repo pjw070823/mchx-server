@@ -137,9 +137,11 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-// sanity: ensure missions.json totals match the board exactly
-if (ALL_MISSIONS.length !== BOARD_SIZE * BOARD_SIZE) {
+// sanity: with `validateCounts` enforcing minimums per difficulty (12/8/5),
+// the board always fills. Total may be larger — `buildBoard` shuffles each
+// tier and only takes as many as it needs, so extras = variety across matches.
+if (ALL_MISSIONS.length < BOARD_SIZE * BOARD_SIZE) {
   throw new Error(
-    `mission count ${ALL_MISSIONS.length} ≠ board size ${BOARD_SIZE * BOARD_SIZE}`,
+    `mission count ${ALL_MISSIONS.length} < board size ${BOARD_SIZE * BOARD_SIZE}`,
   );
 }
