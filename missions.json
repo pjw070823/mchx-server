@@ -276,6 +276,150 @@
       "difficulty": "medium",
       "detector": { "type": "inventory_count", "item": "minecraft:cake", "count": 1 }
     },
+    {
+      "id": "medium_far_from_origin",
+      "displayName": "x, z 좌표 모두 절댓값 1000 넘기기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "pos_abs_xz_1000" }
+    },
+    {
+      "id": "medium_six_pickaxes",
+      "displayName": "네더라이트 제외 모든 곡괭이",
+      "difficulty": "medium",
+      "detector": {
+        "type": "inventory_collection",
+        "items": [
+          "minecraft:wooden_pickaxe",
+          "minecraft:stone_pickaxe",
+          "minecraft:copper_pickaxe",
+          "minecraft:iron_pickaxe",
+          "minecraft:golden_pickaxe",
+          "minecraft:diamond_pickaxe"
+        ]
+      }
+    },
+    {
+      "id": "medium_two_egg_variants",
+      "displayName": "서로 다른 종류의 달걀 2개 모으기",
+      "difficulty": "medium",
+      "detector": {
+        "type": "inventory_distinct",
+        "minDistinct": 2,
+        "candidates": [
+          "minecraft:egg",
+          "minecraft:blue_egg",
+          "minecraft:brown_egg"
+        ]
+      }
+    },
+    {
+      "id": "medium_kill_mob_far_10",
+      "displayName": "10블록 떨어진 몬스터 죽이기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "kill_mob_far_10" }
+    },
+    {
+      "id": "medium_suspicious_stew_2",
+      "displayName": "수상한 스튜 2개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:suspicious_stew", "count": 2 }
+    },
+    {
+      "id": "medium_light_as_rabbit",
+      "displayName": "토끼처럼 가볍게",
+      "difficulty": "medium",
+      "detector": { "type": "advancement", "id": "minecraft:adventure/walk_on_powdered_snow_with_leather_boots" }
+    },
+    {
+      "id": "medium_ancient_debris",
+      "displayName": "소중한 잔해",
+      "difficulty": "medium",
+      "detector": { "type": "advancement", "id": "minecraft:nether/obtain_ancient_debris" }
+    },
+    {
+      "id": "medium_xp_level_30",
+      "displayName": "레벨 30",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "xp_level_30" }
+    },
+    {
+      "id": "medium_sneak_100",
+      "displayName": "은밀하게 위대하게",
+      "difficulty": "medium",
+      "detector": { "type": "advancement", "id": "minecraft:adventure/avoid_vibration" }
+    },
+    {
+      "id": "medium_magma_cream",
+      "displayName": "마그마 크림 1개",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:magma_cream", "count": 1 }
+    },
+    {
+      "id": "medium_jeb_sheep",
+      "displayName": "무지개 양 만들기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "jeb_sheep_named" }
+    },
+    {
+      "id": "medium_kill_zombie_piglin_3",
+      "displayName": "좀비 피글린 3마리 죽이기",
+      "difficulty": "medium",
+      "detector": {
+        "type": "stat",
+        "statType": "minecraft:killed",
+        "statKey": "minecraft:zombified_piglin",
+        "threshold": 3
+      }
+    },
+    {
+      "id": "medium_nether_y_120",
+      "displayName": "지옥에서 y120 이상으로 올라가기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "nether_y_120" }
+    },
+    {
+      "id": "medium_cat_tamed",
+      "displayName": "고양이 길들이기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "cat_tamed" }
+    },
+    {
+      "id": "medium_noteblock_tweb",
+      "displayName": "소리 블록으로 떴다 떴다 비행기 연주하기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "noteblock_song_tweb" }
+    },
+    {
+      "id": "medium_writable_book",
+      "displayName": "책과 깃펜 얻기",
+      "difficulty": "medium",
+      "detector": { "type": "inventory_count", "item": "minecraft:writable_book", "count": 1 }
+    },
+    {
+      "id": "medium_armor_broken",
+      "displayName": "방어구 부수기",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "armor_broken" }
+    },
+    {
+      "id": "medium_armor_stand_full",
+      "displayName": "갑옷 거치대에 아무 갑옷 풀세트",
+      "difficulty": "medium",
+      "detector": { "type": "custom", "key": "armor_stand_full" }
+    },
+    {
+      "id": "medium_three_grass_types",
+      "displayName": "키 작은 잔디 / 고사리 / 키 작은 마른 잔디 모두 얻기",
+      "difficulty": "medium",
+      "detector": {
+        "type": "inventory_collection",
+        "items": [
+          "minecraft:short_grass",
+          "minecraft:fern",
+          "minecraft:short_dry_grass"
+        ]
+      }
+    },
 
     {
       "id": "hard_any_potion",
