@@ -341,6 +341,7 @@ export class Room {
       reason,
       eloChanges,
     });
+    this.resetForRematch();
   }
 
   addSpectator(ws: WebSocket): boolean {
@@ -514,7 +515,23 @@ export class Room {
         reason: "connection",
         eloChanges,
       });
+      this.resetForRematch();
     }
+  }
+
+  /**
+   * After a match settles, return the room to a clean, rematch-ready "waiting" state
+   * and push a fresh room_state to everyone. Without this the room lingered at "ended",
+   * which (a) hid it from the public /api/rooms listing, (b) blocked new joins /
+   * reconnects (addPlayer requires "waiting"), and (c) left clients on stale post-match
+   * state so the host couldn't cleanly start a rematch. Match history + ELO are already
+   * persisted by settleMatch. We only flip the status + re-broadcast room_state here;
+   * the board/claims are left intact (so spectators keep seeing the final board) and
+   * [beginMatch] fully re-initialises everything when a rematch actually starts.
+   */
+  private resetForRematch(): void {
+    this.status = "waiting";
+    this.notifyJoin();
   }
 
   /**
