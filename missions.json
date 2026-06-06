@@ -328,7 +328,7 @@
       "id": "medium_light_as_rabbit",
       "displayName": "토끼처럼 가볍게",
       "difficulty": "medium",
-      "detector": { "type": "advancement", "id": "minecraft:adventure/walk_on_powdered_snow_with_leather_boots" }
+      "detector": { "type": "advancement", "id": "minecraft:adventure/walk_on_powder_snow_with_leather_boots" }
     },
     {
       "id": "medium_ancient_debris",
@@ -464,6 +464,40 @@
       "displayName": "아무 마법이 부여된 책 1개",
       "difficulty": "hard",
       "detector": { "type": "inventory_count", "item": "minecraft:enchanted_book", "count": 1 }
+    },
+    {
+      "id": "hard_all_dyes",
+      "displayName": "모든 염료 모으기 (16종)",
+      "difficulty": "hard",
+      "detector": {
+        "type": "inventory_collection",
+        "items": [
+          "minecraft:white_dye", "minecraft:orange_dye", "minecraft:magenta_dye",
+          "minecraft:light_blue_dye", "minecraft:yellow_dye", "minecraft:lime_dye",
+          "minecraft:pink_dye", "minecraft:gray_dye", "minecraft:light_gray_dye",
+          "minecraft:cyan_dye", "minecraft:purple_dye", "minecraft:blue_dye",
+          "minecraft:brown_dye", "minecraft:green_dye", "minecraft:red_dye",
+          "minecraft:black_dye"
+        ]
+      }
+    },
+    {
+      "id": "hard_sea_lantern",
+      "displayName": "바다 랜턴 1개",
+      "difficulty": "hard",
+      "detector": { "type": "inventory_count", "item": "minecraft:sea_lantern", "count": 1 }
+    },
+    {
+      "id": "hard_wither_death",
+      "displayName": "사그라지기 (시듦 효과로 사망)",
+      "difficulty": "hard",
+      "detector": { "type": "death_by", "source": "wither" }
+    },
+    {
+      "id": "hard_wolf_armor",
+      "displayName": "늑대에게 늑대 갑옷 입히기",
+      "difficulty": "hard",
+      "detector": { "type": "custom", "key": "wolf_armor_equipped" }
     }
   ]
 }
