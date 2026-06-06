@@ -100,7 +100,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("world_event"),
-    kind: z.enum(["death", "advancement"]),
+    kind: z.enum(["death", "advancement", "forfeit"]),
     text: z.string().min(1).max(512),
   }),
   z.object({
@@ -169,7 +169,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("world_event_message"),
     senderId: z.string(),
     senderName: z.string(),
-    kind: z.enum(["death", "advancement"]),
+    kind: z.enum(["death", "advancement", "forfeit"]),
     text: z.string(),
   }),
   z.object({

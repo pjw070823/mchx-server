@@ -30,8 +30,10 @@ const newRoomCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 4);
 /** H3: hard cap on spectators per room so a single attacker can't fan-out broadcasts. */
 const MAX_SPECTATORS_PER_ROOM = 50;
 
-/** C3: grace period after a player's WS closes before the match is forfeited. */
-const RECONNECT_GRACE_MS = 30_000;
+/** C3: grace period after a player's WS closes before the match is forfeited.
+ *  Short enough that a deliberate quit feels responsive, long enough to ride out a
+ *  brief network blip / reconnect. Explicit map-exit (leave_room) bypasses this. */
+const RECONNECT_GRACE_MS = 10_000;
 
 /**
  * C2: anti-cheat time gates on `claim`. Real play can't realistically complete a
@@ -292,23 +294,51 @@ export class Room {
    * broadcast logic is gated on still-playing.
    */
   private forfeitDisconnected(playerId: string): void {
+    this.endByForfeit(playerId, "disconnect");
+  }
+
+  /**
+   * Explicit mid-match exit (e.g. the in-game "게임 포기하기" button, which Save&Quits
+   * the world → mod sends `leave_room`). Settles immediately for the opponent — no
+   * reconnect grace, since this is a deliberate quit. No-op if not currently playing.
+   */
+  forfeitByLeave(playerId: string): void {
+    this.endByForfeit(playerId, "forfeit");
+  }
+
+  /**
+   * Shared core: remove `playerId` from the room, and if a match was in progress
+   * settle it for the remaining player (the winner) and broadcast `match_end`.
+   * Always removes the session first so a player can never be stranded in the map
+   * (which would keep the room un-GC'able).
+   */
+  private endByForfeit(playerId: string, reason: "forfeit" | "disconnect"): void {
     const removed = this.players.get(playerId);
     if (!removed) return;
 
+    if (removed.forfeitTimer) {
+      clearTimeout(removed.forfeitTimer);
+      removed.forfeitTimer = null;
+    }
     this.players.delete(playerId);
     this.touchEmpty();
 
-    if (this.status !== "playing") return;
+    if (this.status !== "playing") {
+      if (this.hostId === playerId) {
+        this.hostId = this.players.values().next().value?.id ?? null;
+      }
+      return;
+    }
 
     const remaining = [...this.players.values()].find((p) => p.disconnectedAt === null) ?? null;
     if (this.hostId === playerId) this.hostId = remaining?.id ?? null;
     const winnerSide = remaining?.side ?? null;
-    const eloChanges = this.settleMatch(winnerSide, "disconnect", removed);
+    const eloChanges = this.settleMatch(winnerSide, reason, removed);
     this.status = "ended";
     this.broadcast({
       type: "match_end",
       winner: winnerSide,
-      reason: "disconnect",
+      reason,
       eloChanges,
     });
   }
@@ -406,7 +436,7 @@ export class Room {
     for (const sp of this.spectators) this.send(sp, msg);
   }
 
-  broadcastWorldEvent(playerId: string, kind: "death" | "advancement", text: string): void {
+  broadcastWorldEvent(playerId: string, kind: "death" | "advancement" | "forfeit", text: string): void {
     const sender = this.players.get(playerId);
     if (!sender) return;
     const msg: ServerMessage = {

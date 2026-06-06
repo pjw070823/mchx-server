@@ -427,7 +427,13 @@ function handleClientMessage(
         state.room.removeSpectator(ws);
       } else {
         // Explicit leave — bypass the C3 grace period and tear down immediately.
-        state.room.forceRemovePlayer(state.playerId);
+        // Mid-match this is a forfeit: settle for the opponent (they win) before
+        // removing the leaver. Pre/post-match it's just a plain room exit.
+        if (state.room.status === "playing") {
+          state.room.forfeitByLeave(state.playerId);
+        } else {
+          state.room.forceRemovePlayer(state.playerId);
+        }
         if (state.room.size() === 0) {
           rooms.delete(state.room.code);
         } else {
