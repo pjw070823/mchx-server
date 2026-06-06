@@ -22,6 +22,8 @@ export const RoomSettings = z.object({
   gameMode: z.enum(["1v1", "2v2"]),
   inventorySave: z.boolean(),
   saturation: z.boolean(),
+  nightVision: z.boolean(),
+  waterBreathing: z.boolean(),
   rated: z.boolean(),
 });
 export type RoomSettings = z.infer<typeof RoomSettings>;
@@ -29,7 +31,9 @@ export type RoomSettings = z.infer<typeof RoomSettings>;
 export const DEFAULT_SETTINGS: RoomSettings = {
   gameMode: "1v1",
   inventorySave: false,
-  saturation: false,
+  saturation: true,
+  nightVision: true,
+  waterBreathing: true,
   rated: true,
 };
 

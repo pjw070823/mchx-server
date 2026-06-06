@@ -335,6 +335,8 @@ export class Room {
     if (partial.gameMode != null) next.gameMode = partial.gameMode;
     if (partial.inventorySave != null) next.inventorySave = partial.inventorySave;
     if (partial.saturation != null) next.saturation = partial.saturation;
+    if (partial.nightVision != null) next.nightVision = partial.nightVision;
+    if (partial.waterBreathing != null) next.waterBreathing = partial.waterBreathing;
     if (partial.rated != null) next.rated = partial.rated;
     // No coupling between `rated` and the perk toggles — the host can freely combine
     // any of them. Ranked matches with non-default perks are still rated; record-keeping

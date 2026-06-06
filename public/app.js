@@ -416,6 +416,8 @@ async function renderMatchDetail(id) {
               <li><span>레이팅 반영</span><span>${settings.rated ? "예" : "아니오"}</span></li>
               <li><span>인벤토리 유지</span><span>${settings.inventorySave ? "예" : "아니오"}</span></li>
               <li><span>포화 효과</span><span>${settings.saturation ? "예" : "아니오"}</span></li>
+              <li><span>야간 투시</span><span>${settings.nightVision ? "예" : "아니오"}</span></li>
+              <li><span>수중 호흡</span><span>${settings.waterBreathing ? "예" : "아니오"}</span></li>
               ${match.seed ? `<li><span>시드</span><span class="mono">${escapeHtml(match.seed)}</span></li>` : ""}
               ${match.room_code ? `<li><span>방 코드</span><span class="mono">${escapeHtml(match.room_code)}</span></li>` : ""}
             </ul>

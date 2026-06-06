@@ -489,7 +489,7 @@
     },
     {
       "id": "hard_wither_death",
-      "displayName": "사그라지기 (시듦 효과로 사망)",
+      "displayName": "사그라지기 (시듦 효과 또는 위더 스켈레톤에게 사망)",
       "difficulty": "hard",
       "detector": { "type": "death_by", "source": "wither" }
     },
