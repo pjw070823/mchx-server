@@ -30,7 +30,7 @@ export type RoomSettings = z.infer<typeof RoomSettings>;
 
 export const DEFAULT_SETTINGS: RoomSettings = {
   gameMode: "1v1",
-  inventorySave: false,
+  inventorySave: true,
   saturation: true,
   nightVision: true,
   waterBreathing: true,
