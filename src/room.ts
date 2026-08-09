@@ -179,7 +179,13 @@ export class Room {
         removed.disconnectedAt = Date.now();
         removed.forfeitTimer = setTimeout(() => {
           if (removed.disconnectedAt === null) return; // reconnected in time
-          if (this.status !== "playing") return;
+          // Deliberately NOT gated on `status === "playing"`. When both players drop,
+          // the first timer settles the match and flips the room back to "waiting";
+          // a status check here would then make the second timer return before
+          // deleting its seat, leaving a session with a dead socket in the map
+          // forever — size() never reaches 0, emptiedAt stays null, and reapIdle
+          // skips the room for the life of the process. endByForfeit already removes
+          // the seat first and only then decides whether a match needs settling.
           this.endByForfeit(playerId, "disconnect");
         }, this.config.reconnectGraceMs);
       }

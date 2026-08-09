@@ -400,25 +400,39 @@ describe("Room — leaving and disconnects", () => {
     assert.equal(ended?.reason, "disconnect");
   });
 
-  // KNOWN BUG (not fixed here — behaviour-preserving refactor).
-  //
-  // The grace timer scheduled in `removePlayer` bails on `status !== "playing"`
-  // BEFORE the session is removed from `players`. When both players drop, the
-  // first timer settles the match (status -> ended -> waiting), so the second
-  // timer hits that guard and leaves its session in the map forever. The room
-  // then has size() == 1 with a dead socket, `emptiedAt` stays null, and
-  // `reapIdle` skips it — the room leaks for the process lifetime.
-  //
-  // `endByForfeit` already removes-then-gates for exactly this reason; the same
-  // ordering has to move up into the timer callback. Kept as `todo` so the
-  // expectation is recorded and the run stays green.
-  it("never strands a session when both players drop", { todo: "grace timer strands the second session" }, async () => {
+  /**
+   * Regression: the grace timer used to bail on `status !== "playing"` before deleting
+   * its seat. With both players gone the first timer settles the match and flips the
+   * room back to "waiting", so the second timer hit that guard and left a session with
+   * a dead socket in the map — size() never reached 0, emptiedAt stayed null, and the
+   * reaper skipped the room for the life of the process.
+   */
+  it("never strands a session when both players drop", async () => {
     const { room } = playingRoom();
     room.removePlayer("p1");
     room.removePlayer("p2");
 
     await new Promise((r) => setTimeout(r, 60));
     assert.equal(room.size(), 0, "both seats must be released so the room can be reaped");
+  });
+
+  it("lets the reaper collect a room both players dropped out of", async () => {
+    const reg = new RoomRegistry();
+    const room = reg.create(FAST);
+    const a = seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+    room.startMatchByHost("p1");
+    room.markReady("p1");
+    room.markReady("p2");
+    a.sock.drop();
+
+    room.removePlayer("p1");
+    room.removePlayer("p2");
+    await new Promise((r) => setTimeout(r, 60));
+
+    assert.equal(room.hasPendingReconnect(), false, "no seat may still be awaiting a reconnect");
+    assert.equal(reg.reapIdle(0), 1);
+    assert.equal(reg.get(room.code), undefined, "the room must not outlive its players");
   });
 });
 
