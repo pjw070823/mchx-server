@@ -27,22 +27,38 @@ import { computeNewElo } from "./elo.js";
 
 const newRoomCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 4);
 
-/** H3: hard cap on spectators per room so a single attacker can't fan-out broadcasts. */
-const MAX_SPECTATORS_PER_ROOM = 50;
-
-/** C3: grace period after a player's WS closes before the match is forfeited.
- *  Short enough that a deliberate quit feels responsive, long enough to ride out a
- *  brief network blip / reconnect. Explicit map-exit (leave_room) bypasses this. */
-const RECONNECT_GRACE_MS = 10_000;
-
 /**
- * C2: anti-cheat time gates on `claim`. Real play can't realistically complete a
- * mission inside MIN_TIME_TO_FIRST_CLAIM or rapid-fire claims faster than
- * MIN_INTERVAL_BETWEEN_CLAIMS. These values are conservative — legitimate fast
- * starts shouldn't trip them, but a script firing all 25 claims at t=0 will.
+ * Tunables that govern a room's pacing and limits. Production always uses
+ * [DEFAULT_ROOM_CONFIG]; the constructor override exists so tests can shrink the
+ * multi-second gates (a test suite can't wait 15s to make a legal claim) without
+ * resorting to fake timers.
  */
-const MIN_TIME_TO_FIRST_CLAIM_MS = 15_000;
-const MIN_INTERVAL_BETWEEN_CLAIMS_MS = 1_000;
+export interface RoomConfig {
+  /** H3: hard cap on spectators per room so a single attacker can't fan-out broadcasts. */
+  maxSpectators: number;
+  /** C3: grace period after a player's WS closes before the match is forfeited.
+   *  Short enough that a deliberate quit feels responsive, long enough to ride out a
+   *  brief network blip / reconnect. Explicit map-exit (leave_room) bypasses this. */
+  reconnectGraceMs: number;
+  /**
+   * C2: anti-cheat time gates on `claim`. Real play can't realistically complete a
+   * mission inside minTimeToFirstClaimMs or rapid-fire claims faster than
+   * minIntervalBetweenClaimsMs. These values are conservative — legitimate fast
+   * starts shouldn't trip them, but a script firing all 25 claims at t=0 will.
+   */
+  minTimeToFirstClaimMs: number;
+  minIntervalBetweenClaimsMs: number;
+  /** Pre-match countdown once every player has reported `world_ready`. */
+  countdownMs: number;
+}
+
+export const DEFAULT_ROOM_CONFIG: RoomConfig = {
+  maxSpectators: 50,
+  reconnectGraceMs: 10_000,
+  minTimeToFirstClaimMs: 15_000,
+  minIntervalBetweenClaimsMs: 1_000,
+  countdownMs: 5_000,
+};
 
 interface PlayerSession {
   id: string;
@@ -91,10 +107,13 @@ export class Room {
    * the `addPlayer` success path clears it.
    */
   private emptiedAt: number | null = Date.now();
+  /** Pacing/limit tunables. Production uses the defaults; tests shrink the gates. */
+  private readonly config: RoomConfig;
 
-  constructor() {
+  constructor(config: Partial<RoomConfig> = {}) {
     this.code = newRoomCode();
     this.seed = randomSeed64();
+    this.config = { ...DEFAULT_ROOM_CONFIG, ...config };
   }
 
   /** Idle-TTL probe. Returns the timestamp the room went empty, or null if occupied. */
@@ -253,7 +272,7 @@ export class Room {
           if (removed.disconnectedAt === null) return;
           if (this.status !== "playing") return;
           this.forfeitDisconnected(playerId);
-        }, RECONNECT_GRACE_MS);
+        }, this.config.reconnectGraceMs);
       }
       const remaining = [...this.players.values()].find((p) => p.id !== playerId && p.disconnectedAt === null) ?? null;
       return { wasPlaying: true, remaining, pendingReconnect: true };
@@ -346,7 +365,7 @@ export class Room {
 
   addSpectator(ws: WebSocket): boolean {
     // H3: hard cap so a single attacker can't fan-out broadcasts indefinitely.
-    if (this.spectators.size >= MAX_SPECTATORS_PER_ROOM) return false;
+    if (this.spectators.size >= this.config.maxSpectators) return false;
     this.spectators.add(ws);
     this.sendRoomState(ws, null);
     if (this.status === "playing" || this.status === "ended") {
@@ -414,9 +433,9 @@ export class Room {
     if (this.matchActiveAt !== null) return;
     this.readyPlayers.add(playerId);
     if (this.readyPlayers.size >= this.players.size) {
-      // 5s pre-match countdown — gives both players time to settle in the
+      // Pre-match countdown — gives both players time to settle in the
       // freshly-loaded world before claims can start firing.
-      const startsAt = Date.now() + 5000;
+      const startsAt = Date.now() + this.config.countdownMs;
       this.matchActiveAt = startsAt;
       this.broadcast({ type: "countdown_start", startsAt });
     }
@@ -471,12 +490,12 @@ export class Room {
     // happens in <15s of in-world time, and even the easiest back-to-back
     // missions take more than 1s.
     const now = Date.now();
-    if (now - this.matchActiveAt < MIN_TIME_TO_FIRST_CLAIM_MS) {
+    if (now - this.matchActiveAt < this.config.minTimeToFirstClaimMs) {
       this.send(player.ws, { type: "claim_rejected", tileId, reason: "too_fast" });
       console.warn(`[room ${this.code}] suspicious early claim by ${player.name} (${now - this.matchActiveAt}ms after start)`);
       return;
     }
-    if (player.lastClaimAt !== null && now - player.lastClaimAt < MIN_INTERVAL_BETWEEN_CLAIMS_MS) {
+    if (player.lastClaimAt !== null && now - player.lastClaimAt < this.config.minIntervalBetweenClaimsMs) {
       this.send(player.ws, { type: "claim_rejected", tileId, reason: "too_fast" });
       console.warn(`[room ${this.code}] suspicious rapid claim by ${player.name} (${now - player.lastClaimAt}ms gap)`);
       return;
@@ -738,11 +757,11 @@ export interface RoomSummary {
 export class RoomRegistry {
   private readonly rooms = new Map<string, Room>();
 
-  create(): Room {
+  create(config: Partial<RoomConfig> = {}): Room {
     let code: string;
     let room: Room;
     do {
-      room = new Room();
+      room = new Room(config);
       code = room.code;
     } while (this.rooms.has(code));
     this.rooms.set(code, room);

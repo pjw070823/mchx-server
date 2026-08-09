@@ -1,0 +1,10 @@
+{
+  // Type-checks the test suite alongside src. The base tsconfig stays limited to
+  // `src` so `npm run build` keeps emitting exactly what it emitted before.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*"]
+}
