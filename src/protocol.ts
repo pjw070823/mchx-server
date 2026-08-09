@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+/**
+ * Wire compatibility version, sent by the mod in `hello`.
+ *
+ * Bump it whenever a change would make an older mod misbehave rather than merely miss a
+ * feature — a renamed field, a new required field, changed semantics. The server refuses
+ * anything it doesn't recognise, so a stale client gets a clear message instead of
+ * failing halfway through a match.
+ *
+ * 1 — first versioned protocol; adds the `hello` handshake and account verification.
+ */
+export const PROTOCOL_VERSION = 1;
+
 export const Difficulty = z.enum(["easy", "medium", "hard"]);
 export type Difficulty = z.infer<typeof Difficulty>;
 
@@ -66,14 +78,32 @@ export type RoomStatus = z.infer<typeof RoomStatus>;
 
 export const ClientMessage = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("hello"),
+    protocolVersion: z.number().int().min(0),
+    /** Free-form build identifier, logged only. */
+    clientVersion: z.string().max(64).optional(),
+  }),
+  z.object({
+    type: z.literal("auth_begin"),
+  }),
+  z.object({
+    type: z.literal("auth_verify"),
+    /** Untrusted; only a lookup key for the hasJoined call. The nonce is the proof. */
+    playerName: z.string().min(1).max(32),
+  }),
+  z.object({
     type: z.literal("create_room"),
     playerName: z.string().min(1).max(32),
+    // Accepted for backwards compatibility and IGNORED. The only uuid the server will
+    // attach to a session comes from Mojang via `auth_verify`; trusting this field is
+    // what let anyone claim any account.
     uuid: z.string().nullable().optional(),
   }),
   z.object({
     type: z.literal("join_room"),
     roomCode: z.string().length(4),
     playerName: z.string().min(1).max(32),
+    /** Ignored — see `create_room`. */
     uuid: z.string().nullable().optional(),
   }),
   z.object({
@@ -118,6 +148,24 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("error"),
     code: z.string(),
     message: z.string(),
+  }),
+  z.object({
+    type: z.literal("hello_ok"),
+    protocolVersion: z.number().int(),
+  }),
+  z.object({
+    type: z.literal("auth_challenge"),
+    /** One-time nonce the client passes to Mojang's joinServer. */
+    serverId: z.string(),
+  }),
+  z.object({
+    type: z.literal("auth_result"),
+    authenticated: z.boolean(),
+    /** Mojang-confirmed account, or null when verification failed. */
+    uuid: z.string().nullable(),
+    name: z.string().nullable(),
+    /** Machine-readable failure cause; null on success. */
+    reason: z.string().nullable(),
   }),
   z.object({
     type: z.literal("room_state"),

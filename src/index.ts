@@ -141,6 +141,9 @@ wss.on("connection", (ws, req) => {
     lastRefillAt: Date.now(),
     spectateFailCount: 0,
     spectateBlockedUntil: 0,
+    protocolVersion: null,
+    challenge: null,
+    verified: null,
   };
   conns.set(ws, state);
   console.log(`[ws] connect ${state.playerId} from ${remoteAddr ?? "?"}`);

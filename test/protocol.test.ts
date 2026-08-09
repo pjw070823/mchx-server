@@ -32,6 +32,17 @@ import type { ServerMessage } from "../src/protocol.js";
 
 /** Message JSON the mod is known to produce, paired with what it must parse to. */
 const CLIENT_FIXTURES: ReadonlyArray<{ name: string; json: string; type: string }> = [
+  {
+    name: "hello",
+    json: '{"type":"hello","protocolVersion":1,"clientVersion":"mchx 0.1.1"}',
+    type: "hello",
+  },
+  { name: "auth_begin", json: '{"type":"auth_begin"}', type: "auth_begin" },
+  {
+    name: "auth_verify",
+    json: '{"type":"auth_verify","playerName":"samarian00"}',
+    type: "auth_verify",
+  },
   // uuid present
   {
     name: "create_room with uuid",
@@ -130,6 +141,27 @@ const SERVER_REQUIRED: ReadonlyArray<{
     name: "error",
     msg: { type: "error", code: "room_full", message: "room already has 2 players" },
     required: { code: "string", message: "string" },
+  },
+  {
+    name: "hello_ok",
+    msg: { type: "hello_ok", protocolVersion: 1 },
+    required: { protocolVersion: "number" },
+  },
+  {
+    name: "auth_challenge",
+    msg: { type: "auth_challenge", serverId: "a".repeat(40) },
+    required: { serverId: "string" },
+  },
+  {
+    name: "auth_result",
+    msg: {
+      type: "auth_result",
+      authenticated: true,
+      uuid: "4b072de8-8297-4c9a-845d-ad94e38f95b3",
+      name: "samarian00",
+      reason: null,
+    },
+    required: { authenticated: "boolean" },
   },
   {
     name: "room_state",

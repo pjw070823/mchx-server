@@ -81,16 +81,27 @@ function seat(room: RoomInstance, id: string, name: string, uuid: string | null 
   return { sock, session };
 }
 
-/** A 2-player room already in `playing` with the countdown elapsed. */
-function playingRoom(config: Partial<RoomConfig> = FAST) {
+/**
+ * A 2-player room already in `playing` with the countdown elapsed.
+ *
+ * Seats are unauthenticated (no uuid) by default, which is what a guest looks like.
+ * Pass uuids to model two verified accounts — the only case that can move ratings.
+ */
+function playingRoom(
+  config: Partial<RoomConfig> = FAST,
+  accounts: { a?: string | null; b?: string | null } = {},
+) {
   const room = new Room(config);
-  const a = seat(room, "p1", "Alice");
-  const b = seat(room, "p2", "Bob");
+  const a = seat(room, "p1", "Alice", accounts.a ?? null);
+  const b = seat(room, "p2", "Bob", accounts.b ?? null);
   room.startMatchByHost("p1");
   room.markReady("p1");
   room.markReady("p2");
   return { room, a, b };
 }
+
+/** Two Mojang-verified accounts, i.e. a match that is allowed to count. */
+const VERIFIED = { a: "11111111-1111-4111-8111-111111111111", b: "22222222-2222-4222-8222-222222222222" };
 
 function boardOf(sock: FakeWs): Array<{ tileId: string; missionId: string }> {
   const snapshot = sock.last("match_start");
@@ -303,8 +314,8 @@ describe("Room — winning", () => {
     assert.equal(b.sock.last("match_end")?.winner, "A");
   });
 
-  it("reports an ELO change for both players in a rated match", () => {
-    const { room, a } = playingRoom();
+  it("reports an ELO change for both players when both accounts are verified", () => {
+    const { room, a } = playingRoom(FAST, VERIFIED);
     const board = boardOf(a.sock);
     for (const tile of A_WINNING_CHAIN) {
       room.attemptClaim("p1", tile, missionFor(board, tile));
@@ -314,6 +325,29 @@ describe("Room — winning", () => {
     assert.ok(changes.p1 && changes.p2, "both players should get an elo entry");
     assert.ok(changes.p1.delta > 0, "winner should gain rating");
     assert.ok(changes.p2.delta < 0, "loser should lose rating");
+  });
+
+  it("refuses to rate a match with an unauthenticated player", () => {
+    // A session only carries a uuid once Mojang confirmed it, so a guest must not be
+    // able to move anyone's rating — including their opponent's.
+    const { room, a } = playingRoom(FAST, { a: VERIFIED.a, b: null });
+    const board = boardOf(a.sock);
+    for (const tile of A_WINNING_CHAIN) {
+      room.attemptClaim("p1", tile, missionFor(board, tile));
+    }
+
+    const ended = a.sock.last("match_end");
+    assert.equal(ended?.winner, "A", "the match still resolves normally");
+    assert.deepEqual(ended?.eloChanges, {}, "but nobody's rating moves");
+  });
+
+  it("refuses to rate a match played by one account against itself", () => {
+    const { room, a } = playingRoom(FAST, { a: VERIFIED.a, b: VERIFIED.a });
+    const board = boardOf(a.sock);
+    for (const tile of A_WINNING_CHAIN) {
+      room.attemptClaim("p1", tile, missionFor(board, tile));
+    }
+    assert.deepEqual(a.sock.last("match_end")?.eloChanges, {});
   });
 
   it("returns to waiting so the room is rematch-ready, with a fresh seed", () => {

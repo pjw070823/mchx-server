@@ -1,7 +1,8 @@
 import type { WebSocket } from "ws";
 import type { ClientMessage, ServerMessage } from "./protocol.js";
-import { encode } from "./protocol.js";
+import { encode, PROTOCOL_VERSION } from "./protocol.js";
 import type { Room, RoomRegistry } from "./room.js";
+import { issueChallenge, verifyChallenge, type AuthChallenge, type VerifiedAccount } from "./auth.js";
 
 /**
  * Per-connection state. One of these exists for the life of a socket.
@@ -21,7 +22,24 @@ export interface ConnState {
   /** Backoff against brute-forcing the 32^4 room-code space. */
   spectateFailCount: number;
   spectateBlockedUntil: number;
+  /** Set by `hello`. Null means the client hasn't introduced itself yet. */
+  protocolVersion: number | null;
+  /** In-flight auth nonce. Replaced by a new `auth_begin`, cleared once used. */
+  challenge: AuthChallenge | null;
+  /**
+   * The Mojang-confirmed account, or null for a guest.
+   *
+   * This is the ONLY source of a player's uuid. Anything the client says about its own
+   * identity is ignored, which is the entire point of the handshake.
+   */
+  verified: VerifiedAccount | null;
 }
+
+/**
+ * Oldest protocol this build still speaks. Raise it when an old client would do
+ * something worse than miss a feature.
+ */
+export const MIN_SUPPORTED_PROTOCOL = 1;
 
 /** How many spectate misses before a connection is timed out from trying again. */
 export const SPECTATE_FAIL_THRESHOLD = 5;
@@ -51,6 +69,20 @@ export function handleClientMessage(
   switch (msg.type) {
     case "ping":
       return send(ws, { type: "pong" });
+
+    case "hello":
+      return hello(ws, state, msg);
+
+    case "auth_begin": {
+      state.challenge = issueChallenge();
+      return send(ws, { type: "auth_challenge", serverId: state.challenge.serverId });
+    }
+
+    case "auth_verify":
+      // Talks to Mojang, so it can't block the message loop. Failures are reported to
+      // the client as an unauthenticated result rather than thrown away.
+      void authVerify(ws, state, msg.playerName);
+      return;
 
     case "create_room":
       return createRoom(ws, state, msg, rooms);
@@ -105,20 +137,85 @@ export function handleClientMessage(
   }
 }
 
+/**
+ * Version handshake. A client whose protocol we don't speak is told so and disconnected,
+ * rather than being allowed to fail confusingly somewhere later in a match.
+ */
+function hello(
+  ws: WebSocket,
+  state: ConnState,
+  msg: Extract<ClientMessage, { type: "hello" }>,
+): void {
+  const version = msg.protocolVersion;
+  if (version < MIN_SUPPORTED_PROTOCOL || version > PROTOCOL_VERSION) {
+    console.warn(`[ws] ${state.playerId} unsupported protocol ${version}`);
+    sendError(
+      ws,
+      "protocol_mismatch",
+      `이 서버는 프로토콜 ${MIN_SUPPORTED_PROTOCOL}~${PROTOCOL_VERSION}만 지원합니다 (클라이언트: ${version}). 모드를 업데이트해 주세요.`,
+    );
+    ws.close(1008, "protocol_mismatch");
+    return;
+  }
+  state.protocolVersion = version;
+  console.log(`[ws] ${state.playerId} hello v${version}${msg.clientVersion ? ` (${msg.clientVersion})` : ""}`);
+  send(ws, { type: "hello_ok", protocolVersion: PROTOCOL_VERSION });
+}
+
+/**
+ * Second half of the account handshake: ask Mojang whether this name joined under the
+ * nonce we issued. The challenge is consumed either way, so a failed attempt can't be
+ * retried against the same nonce.
+ */
+async function authVerify(ws: WebSocket, state: ConnState, playerName: string): Promise<void> {
+  const challenge = state.challenge;
+  state.challenge = null;
+
+  const outcome = await verifyChallenge(challenge, playerName);
+  if (!outcome.ok) {
+    console.log(`[auth] ${state.playerId} not verified: ${outcome.reason}`);
+    state.verified = null;
+    return send(ws, { type: "auth_result", authenticated: false, uuid: null, name: null, reason: outcome.reason });
+  }
+
+  state.verified = outcome.account;
+  console.log(`[auth] ${state.playerId} verified as ${outcome.account.name} (${outcome.account.uuid})`);
+  send(ws, {
+    type: "auth_result",
+    authenticated: true,
+    uuid: outcome.account.uuid,
+    name: outcome.account.name,
+    reason: null,
+  });
+}
+
+/**
+ * Guard for anything that seats a player. Spectating is deliberately exempt: it is
+ * read-only, and an out-of-date web page shouldn't be locked out of watching.
+ */
+function requireHello(ws: WebSocket, state: ConnState): boolean {
+  if (state.protocolVersion !== null) return true;
+  sendError(ws, "hello_required", "send `hello` before joining a room");
+  return false;
+}
+
 function createRoom(
   ws: WebSocket,
   state: ConnState,
   msg: Extract<ClientMessage, { type: "create_room" }>,
   rooms: RoomRegistry,
 ): void {
+  if (!requireHello(ws, state)) return;
   if (state.room) return sendError(ws, "already_in_room", "leave first");
+
+  const { uuid, name } = identityOf(state, msg.playerName);
   // One account, one room. Blocks the obvious self-play setup.
-  if (msg.uuid && rooms.findRoomContainingUuid(msg.uuid)) {
+  if (uuid && rooms.findRoomContainingUuid(uuid)) {
     return sendError(ws, "uuid_in_use", "this account is already in a room");
   }
 
   const room = rooms.create();
-  const session = room.addPlayer(state.playerId, msg.playerName, msg.uuid ?? null, ws, state.remoteAddr);
+  const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr);
   if (!session) {
     // Don't leak a room whose only join failed; the reaper would get it eventually.
     rooms.delete(room.code);
@@ -134,13 +231,17 @@ function joinRoom(
   msg: Extract<ClientMessage, { type: "join_room" }>,
   rooms: RoomRegistry,
 ): void {
+  if (!requireHello(ws, state)) return;
   if (state.room) return sendError(ws, "already_in_room", "leave first");
   const room = rooms.get(msg.roomCode);
   if (!room) return sendError(ws, "room_not_found", `no room ${msg.roomCode}`);
 
-  if (msg.uuid) {
-    // A held seat wins over a fresh join: this is a reconnect, not a new player.
-    const disconnected = room.findDisconnectedByUuid(msg.uuid);
+  const { uuid, name } = identityOf(state, msg.playerName);
+
+  // Reconnects are keyed on the verified account, so an unauthenticated client can no
+  // longer claim someone else's held seat by guessing their uuid.
+  if (uuid) {
+    const disconnected = room.findDisconnectedByUuid(uuid);
     if (disconnected && room.reconnectPlayer(disconnected.id, ws, state.remoteAddr)) {
       // Adopt the original id so the room keeps treating us as the same participant.
       state.playerId = disconnected.id;
@@ -151,16 +252,28 @@ function joinRoom(
       return;
     }
 
-    const elsewhere = rooms.findRoomContainingUuid(msg.uuid);
+    const elsewhere = rooms.findRoomContainingUuid(uuid);
     if (elsewhere && elsewhere !== room) {
       return sendError(ws, "uuid_in_use", "this account is already in another room");
     }
   }
 
-  const session = room.addPlayer(state.playerId, msg.playerName, msg.uuid ?? null, ws, state.remoteAddr);
+  const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr);
   if (!session) return sendError(ws, "room_full", "room already has 2 players");
   state.room = room;
   room.notifyJoin();
+}
+
+/**
+ * Who this connection is, as far as the server is concerned.
+ *
+ * A verified account supplies both uuid and display name — using Mojang's name too means
+ * a player can't sit in the lobby under someone else's handle. Without verification the
+ * client is a guest: no uuid, so no rating, no persistence, no reconnect claim.
+ */
+function identityOf(state: ConnState, claimedName: string): { uuid: string | null; name: string } {
+  if (state.verified) return { uuid: state.verified.uuid, name: state.verified.name };
+  return { uuid: null, name: claimedName };
 }
 
 function spectate(

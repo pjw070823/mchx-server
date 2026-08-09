@@ -8,6 +8,7 @@
 
 import WebSocket from "ws";
 import type { ServerMessage } from "./protocol.js";
+import { PROTOCOL_VERSION } from "./protocol.js";
 
 const URL = process.env.MCHX_WS ?? "ws://localhost:8787/ws";
 const ROOM_ARG = process.argv[2];
@@ -50,6 +51,10 @@ function connectBot(name: string, mode: "create" | { join: string }): BotState {
   };
 
   ws.on("open", () => {
+    // The version handshake is required before a room will seat you. Bots stay
+    // unauthenticated on purpose — they have no Minecraft account, so their matches
+    // are unrated, which is exactly what you want from a test harness.
+    ws.send(JSON.stringify({ type: "hello", protocolVersion: PROTOCOL_VERSION, clientVersion: "dev-bot" }));
     if (mode === "create") {
       ws.send(JSON.stringify({ type: "create_room", playerName: name }));
     } else {

@@ -95,17 +95,22 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
 }
 
 /**
- * Self-play guard. A match between the same account, or between two clients on the same
- * machine, is still recorded but never rated — otherwise the cheapest way to climb the
- * ladder would be to beat yourself repeatedly.
+ * Decide whether this match may move ratings.
  *
- * Same-IP catches siblings on one connection too. They can still play; they just can't
- * farm rating. That trade is deliberate.
+ * Three ways to lose that right:
+ *
+ *  - **Unauthenticated.** A session only carries a uuid if Mojang confirmed the account,
+ *    so a null uuid means we do not know who this was. Rating an anonymous player would
+ *    put the ladder back where it started: anyone able to claim any identity.
+ *  - **Same account on both sides.** The cheapest possible farm.
+ *  - **Same machine.** Catches the two-clients-one-PC version of the same thing. Genuine
+ *    siblings on one connection get caught too; they can still play, just not for rating.
  */
 function resolveRated(input: SettlementInput): { rated: boolean; unratedReason: string | null } {
   const { a, b, settings } = input;
   if (!settings.rated || !a || !b) return { rated: settings.rated, unratedReason: null };
-  if (a.uuid && b.uuid && a.uuid === b.uuid) return { rated: false, unratedReason: "same_uuid" };
+  if (!a.uuid || !b.uuid) return { rated: false, unratedReason: "unauthenticated" };
+  if (a.uuid === b.uuid) return { rated: false, unratedReason: "same_uuid" };
   if (a.remoteAddr && b.remoteAddr && a.remoteAddr === b.remoteAddr) {
     return { rated: false, unratedReason: "same_ip" };
   }
