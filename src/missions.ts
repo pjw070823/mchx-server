@@ -84,6 +84,17 @@ const MissionsFile = z.object({
   missions: z.array(Mission),
 });
 
+/**
+ * Locate the mission catalogue.
+ *
+ * `shared/missions.json` in the parent repo is canonical — it is what the mod's
+ * detectors are written against, and what you edit. `server/missions.json` is a copy
+ * that exists only so a standalone clone of this repo can boot; refresh it with
+ * `npm run sync-missions`, and `test/missions.test.ts` fails if the two drift.
+ *
+ * The candidate order below prefers the canonical file, then the layouts a deployment
+ * might produce.
+ */
 function resolveMissionsPath(): string {
   if (process.env.MCHX_MISSIONS_PATH) return process.env.MCHX_MISSIONS_PATH;
   const candidates = [
