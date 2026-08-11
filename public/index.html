@@ -4,26 +4,53 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Minecraft Hex</title>
+    <meta name="description" content="같은 시드, 각자의 세계. 5×5 헥스 보드를 두고 겨루는 1v1 마인크래프트 미션 레이스." />
+
+    <!-- 폰트는 있으면 쓰고 없으면 시스템 폰트로 떨어집니다 (styles.css 의 fallback). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="site-header">
       <a href="#/" class="brand">
         <span class="brand-mark"></span>
-        <span class="brand-text">Minecraft Hex</span>
+        <span class="brand-text">HEX</span>
+        <span class="brand-sub">MINECRAFT</span>
       </a>
+
       <nav id="nav" class="tabs">
         <a href="#/" data-route="home">홈</a>
-        <a href="#/leaderboard" data-route="leaderboard">리더보드</a>
+        <a href="#/live" data-route="live">라이브</a>
+        <a href="#/leaderboard" data-route="leaderboard">랭킹</a>
         <a href="#/matches" data-route="matches">경기 기록</a>
-        <a href="#/players" data-route="players">유저 검색</a>
+        <a href="#/players" data-route="players">유저</a>
+        <a href="#/download" data-route="download">다운로드</a>
       </nav>
+
+      <div class="header-right">
+        <!-- 실제 활성 방 수에 연동됩니다 (app.js 가 주기적으로 갱신). -->
+        <div id="live-pill" class="live-pill">
+          <span class="live-dot"></span>
+          <span id="live-label">—</span>
+        </div>
+        <a href="#/download" class="btn">모드 받기</a>
+      </div>
     </header>
 
     <main id="view" class="view"></main>
 
     <footer class="site-footer">
-      <span>mchx · 1v1 미션 레이스</span>
+      <span class="hexmark"></span>
+      <span>Minecraft Hex — 비공식 프로젝트. Mojang / Microsoft 와 무관합니다.</span>
+      <span class="links">
+        <a href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">소스</a>
+        <a href="/api/missions" target="_blank" rel="noopener">API</a>
+      </span>
     </footer>
 
     <script type="module" src="/app.js"></script>

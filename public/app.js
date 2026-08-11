@@ -60,24 +60,130 @@ function showError(err) {
 
 // ---- view: HOME -------------------------------------------------------------
 
+/**
+ * 랜딩. 게임이 뭔지 모르는 사람이 처음 보는 화면이라, 규칙을 세 줄로 설명하는 것이
+ * 목적입니다. 실제 매치를 보러 가는 건 라이브 탭입니다.
+ *
+ * 히어로 옆 육각형은 장식입니다 — 실제 보드가 아니라 도형이며, 진영 색이 무엇을
+ * 뜻하는지 미리 눈에 익히는 역할만 합니다.
+ */
 async function renderHome() {
   view.innerHTML = `
-    <section class="page page-home">
+    <section class="hero-grid">
       <div class="hero">
-        <h1>관전하기</h1>
-        <p class="sub">진행 중인 매치를 관전하거나, 방 코드로 직접 접속하세요.</p>
-        <form id="spec-form" class="spec-form">
-          <input id="spec-code" maxlength="4" placeholder="방 코드 (예: AB23)"
-                 autocomplete="off" />
-          <button type="submit">관전</button>
-        </form>
+        <div class="kicker">1V1 · 같은 시드 · 각자의 세계</div>
+        <h1>먼저 <span class="acc">연결</span>하는 쪽이<br />이깁니다</h1>
+        <p class="lede">
+          두 사람이 같은 시드의 서로 다른 세계에서 동시에 시작합니다.
+          5×5 헥스 보드의 각 칸에는 미션이 하나씩 걸려 있고, 먼저 달성한 쪽이 그 칸을 가져갑니다.
+          자기 진영의 마주보는 두 변을 잇는 길을 완성하면 승리합니다.
+        </p>
+        <div class="hero-cta">
+          <a class="btn" href="#/live">라이브 보기</a>
+          <a class="btn-ghost" href="#/download">모드 다운로드</a>
+        </div>
+        <div class="hero-stats" id="hero-stats">
+          <div><div class="stat-num">—</div><div class="stat-label">미션 풀</div></div>
+          <div><div class="stat-num">—</div><div class="stat-label">누적 매치</div></div>
+          <div><div class="stat-num">—</div><div class="stat-label">등록 플레이어</div></div>
+        </div>
       </div>
 
+      <div class="hero-board">
+        <div class="hero-hexes">${heroHexes()}</div>
+      </div>
+    </section>
+
+    <section class="rules">
+      <div>
+        <div class="kicker">규칙</div>
+        <h2>운이 아니라 순서를 겨루는 경기</h2>
+      </div>
+      <div class="rules-list">
+        <div class="rule">
+          <div class="n">01</div>
+          <div class="body">
+            매치가 시작되면 두 사람 모두 <strong>같은 시드</strong>의 새 세계로 들어갑니다.
+            서로의 세계를 오갈 수는 없고, 오가는 것은 누가 어떤 칸을 가져갔는지뿐입니다.
+          </div>
+        </div>
+        <div class="rule">
+          <div class="n">02</div>
+          <div class="body">
+            보드의 25칸에는 난이도별 미션이 배정됩니다. 미션을 달성하면 그 칸이 즉시 내 색으로 바뀌고,
+            <strong>같은 칸을 상대가 다시 가져갈 수는 없습니다.</strong>
+          </div>
+        </div>
+        <div class="rule">
+          <div class="n">03</div>
+          <div class="body">
+            파랑은 위아래, 보라는 좌우. 자기 진영의 마주보는 두 변을 <strong>끊기지 않게 잇는 순간</strong> 경기가 끝납니다.
+            남은 칸이 몇 개든 상관없습니다.
+          </div>
+        </div>
+        <div class="rules-note">
+          어떤 미션을 어떤 순서로 집는지가 실력입니다. 쉬운 칸만 모아도 길이 이어지지 않으면 이기지 못하고,
+          상대의 길목을 먼저 끊는 선택이 종종 더 빠릅니다.
+        </div>
+      </div>
+    </section>
+  `;
+
+  // 통계는 실제 값만 씁니다. 못 가져오면 자리를 비워 두지, 그럴듯한 숫자를 지어내지 않습니다.
+  try {
+    const [missions, matches, board] = await Promise.all([
+      api("/api/missions").catch(() => null),
+      api("/api/matches?limit=1").catch(() => null),
+      api("/api/leaderboard?limit=200").catch(() => null),
+    ]);
+    const cells = view.querySelectorAll("#hero-stats .stat-num");
+    if (cells[0] && missions) cells[0].textContent = String(missions.missions?.length ?? "—");
+    if (cells[1] && matches) cells[1].textContent = String(matches.total ?? "—");
+    if (cells[2] && board) cells[2].textContent = String(board.players?.length ?? "—");
+  } catch { /* 통계는 있으면 좋은 것이지 필수가 아닙니다 */ }
+}
+
+/** 히어로 장식용 육각 격자. 마름모꼴로 어긋나게 쌓아 실제 보드 모양을 흉내냅니다. */
+function heroHexes() {
+  // 진영 색이 들어갈 자리 — 파랑은 세로로, 보라는 가로로 이어지게 배치했습니다.
+  const a = new Set(["0,2", "1,2", "2,2", "3,2"]);
+  const b = new Set(["2,0", "2,1", "2,3"]);
+  let out = "";
+  for (let r = 0; r < 5; r++) {
+    let row = "";
+    for (let c = 0; c < 5; c++) {
+      const key = `${r},${c}`;
+      const cls = a.has(key) ? " a" : b.has(key) ? " b" : "";
+      row += `<div class="cell${cls}"><i></i></div>`;
+    }
+    // 각 행을 반 칸씩 밀어 육각 격자처럼 보이게 합니다.
+    out += `<div class="row" style="margin-left:calc((var(--w) + 3px) * ${(4 - r) / 2})">${row}</div>`;
+  }
+  return out;
+}
+
+// ---- view: LIVE (진행 중인 매치 + 방 코드) ----------------------------------
+
+async function renderLive() {
+  view.innerHTML = `
+    <section class="page">
       <div class="section-header">
-        <h2>활성 방 목록</h2>
+        <div>
+          <div class="kicker">라이브</div>
+          <h1>진행 중인 매치</h1>
+        </div>
+        <div>
+          <div class="kicker">비공개 방</div>
+          <form id="spec-form" class="spec-form" style="margin-top:10px">
+            <input id="spec-code" maxlength="4" placeholder="CODE" autocomplete="off" />
+            <button type="submit" class="btn-ghost">관전</button>
+          </form>
+        </div>
+      </div>
+      <div id="rooms-list" class="rooms-list"><div class="loading">불러오는 중…</div></div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end">
         <button id="refresh-rooms" class="ghost-btn">새로고침</button>
       </div>
-      <div id="rooms-list" class="rooms-list">불러오는 중…</div>
     </section>
   `;
 
@@ -89,17 +195,16 @@ async function renderHome() {
   });
 
   view.querySelector("#refresh-rooms").addEventListener("click", refreshRooms);
-
   await refreshRooms();
 
   async function refreshRooms() {
     const target = view.querySelector("#rooms-list");
     if (!target) return;
-    target.textContent = "불러오는 중…";
+    target.innerHTML = `<div class="loading">불러오는 중…</div>`;
     try {
       const { rooms } = await api("/api/rooms");
       if (!rooms?.length) {
-        target.innerHTML = `<div class="empty">현재 활성화된 방이 없습니다.</div>`;
+        target.innerHTML = `<div class="empty">지금 열려 있는 방이 없습니다. 방 코드를 알고 있다면 위에 입력하세요.</div>`;
         return;
       }
       target.innerHTML = rooms.map(roomCard).join("");
@@ -666,6 +771,93 @@ function renderEloSparkline(points) {
   `;
 }
 
+// ---- view: DOWNLOAD ---------------------------------------------------------
+
+/**
+ * 설치 안내.
+ *
+ * 아직 공개 배포본이 없어서 다운로드 버튼 대신 그 사실을 적어 둡니다. 없는 링크를
+ * 걸어 두면 클릭한 사람이 404 를 보고 프로젝트 전체를 의심하게 됩니다.
+ */
+function renderDownload() {
+  view.innerHTML = `
+    <section class="page">
+      <div class="kicker">설치</div>
+      <h1 style="margin-top:12px;font-size:clamp(30px,3.4vw,44px)">모드 설치하기</h1>
+      <p class="lede" style="max-width:560px">
+        서버는 마인크래프트 상태를 전혀 보지 않습니다. 미션 달성은 각자의 클라이언트가 판단하고,
+        오가는 것은 시드와 점령 정보뿐입니다.
+      </p>
+
+      <div class="dl-card">
+        <div class="rel">
+          <div class="rel-name">mchx 0.1.1</div>
+          <div class="rel-meta">아직 공개 배포 전입니다 — 준비되면 이 자리에 다운로드가 올라옵니다.</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <a class="btn-ghost" href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">저장소 보기</a>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="kicker">설치 순서</div>
+        <div class="step">
+          <div class="n">01</div>
+          <div>
+            <div class="title">Fabric 로더가 설치된 마인크래프트 26.1.2 준비</div>
+            <div class="body">Prism Launcher, Modrinth App 등 어떤 런처든 상관없습니다. 별도 인스턴스를 하나 만들어 두는 편이 편합니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">02</div>
+          <div>
+            <div class="title">의존 모드 두 개를 mods 폴더에 넣기</div>
+            <div class="body">Fabric API 와 Fabric Language Kotlin 이 필요합니다. 둘 중 하나라도 없으면 게임이 모드를 건너뜁니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">03</div>
+          <div>
+            <div class="title">mchx jar 을 같은 폴더에 넣고 실행</div>
+            <div class="body">타이틀 화면에 <strong>MCHX 로비</strong> 버튼이 생기면 정상입니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">04</div>
+          <div>
+            <div class="title">필요하면 접속할 서버 바꾸기</div>
+            <div class="body">
+              기본값은 공식 서버입니다. 직접 띄운 서버를 쓰려면 <code class="mono">config/mchx.json</code> 을 고치세요.
+              메모장으로 저장하면 BOM 이 붙지만 모드가 알아서 걷어냅니다.
+            </div>
+            <code>{"serverUrl":"ws://내서버주소:8787/ws"}</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="req-grid">
+        <div>
+          <div class="kicker">필요한 것</div>
+          <div class="body">
+            Minecraft 26.1.2<br />
+            Fabric Loader 0.19+<br />
+            Fabric API<br />
+            Fabric Language Kotlin 1.13+
+          </div>
+        </div>
+        <div>
+          <div class="kicker">필요 없는 것</div>
+          <div class="body">
+            서버 접속 설정 — 각자 싱글플레이로 진행합니다<br />
+            포트 개방 — 클라이언트가 먼저 연결합니다<br />
+            별도 계정 — 마인크래프트 계정으로 인증합니다
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 // ---- view: BOARD (live spectator) ------------------------------------------
 
 let spectatorCleanup = null;
@@ -698,6 +890,10 @@ function dispatch() {
 
   if (route === "" || route === "#" || route === "#/") {
     renderHome();
+  } else if (route === "#/live") {
+    renderLive();
+  } else if (route === "#/download") {
+    renderDownload();
   } else if (route === "#/leaderboard") {
     renderLeaderboard();
   } else if (matchersDetail) {
@@ -718,9 +914,12 @@ function dispatch() {
 function setActiveTab(route) {
   const map = {
     home: route === "#/" || route === "" || route === "#",
+    // 관전 화면은 라이브에서 들어가므로 그 탭을 계속 켜 둡니다.
+    live: route === "#/live" || route.startsWith("#/board/"),
     leaderboard: route === "#/leaderboard",
     matches: route.startsWith("#/matches"),
     players: route.startsWith("#/players"),
+    download: route === "#/download",
   };
   document.querySelectorAll("#nav a").forEach((a) => {
     const r = a.dataset.route;
@@ -728,14 +927,38 @@ function setActiveTab(route) {
   });
 }
 
+/**
+ * 헤더의 라이브 표시등. 실제 활성 방 수를 보여줍니다 — 켜져 있는데 아무 일도
+ * 없는 표시등은 신뢰를 깎아먹기만 하므로, 방이 없으면 점도 꺼 둡니다.
+ */
+async function refreshLivePill() {
+  const pill = document.getElementById("live-pill");
+  const label = document.getElementById("live-label");
+  if (!pill || !label) return;
+  try {
+    const { rooms } = await api("/api/rooms");
+    const n = rooms?.length ?? 0;
+    const playing = (rooms ?? []).filter((r) => r.status === "playing").length;
+    pill.classList.toggle("on", n > 0);
+    label.textContent = n === 0 ? "대기 중인 매치 없음" : `${n}개 방 · ${playing}개 진행 중`;
+  } catch {
+    pill.classList.remove("on");
+    label.textContent = "연결 안 됨";
+  }
+}
+
 window.addEventListener("hashchange", dispatch);
 window.addEventListener("DOMContentLoaded", () => {
   if (!location.hash || location.hash === "#") location.hash = "#/";
   dispatch();
+  refreshLivePill();
+  setInterval(refreshLivePill, 20_000);
 });
 
 // If DOMContentLoaded already fired (module loaded after), kick off now.
 if (document.readyState !== "loading") {
   if (!location.hash || location.hash === "#") location.hash = "#/";
   dispatch();
+  refreshLivePill();
+  setInterval(refreshLivePill, 20_000);
 }
