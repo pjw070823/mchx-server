@@ -35,6 +35,27 @@ export const SETTINGS_POLICY: Policy = {
   rated: { requiredTier: "free" },
 };
 
+/**
+ * The fixed ladder preset.
+ *
+ * Identical to `DEFAULT_SETTINGS` today, and deliberately *not* the same constant.
+ * `DEFAULT_SETTINGS` is where a custom room starts and is expected to drift as tier
+ * options land; the ladder must not drift with it. Free perk choice would also make
+ * leaderboard positions incomparable — two players at the same rating would have been
+ * playing different games.
+ *
+ * `rated: true` here, plus `Room.updateSettings` refusing outright for ranked rooms,
+ * is what makes it impossible for a player to opt a ranked match out of rating.
+ */
+export const RANKED_SETTINGS: RoomSettings = {
+  gameMode: "1v1",
+  inventorySave: true,
+  saturation: true,
+  nightVision: true,
+  waterBreathing: true,
+  rated: true,
+};
+
 export interface PatchResult {
   /** The settings after applying every field the requester was allowed to change. */
   readonly settings: RoomSettings;

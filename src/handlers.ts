@@ -1,39 +1,14 @@
 import type { WebSocket } from "ws";
-import type { ClientMessage, ServerMessage } from "./protocol.js";
-import { encode, PROTOCOL_VERSION } from "./protocol.js";
-import type { Room, RoomRegistry } from "./room.js";
-import { issueChallenge, verifyChallenge, type AuthChallenge, type VerifiedAccount } from "./auth.js";
+import type { ClientMessage } from "./protocol.js";
+import { PROTOCOL_VERSION } from "./protocol.js";
+import type { RoomRegistry } from "./room.js";
+import type { ConnState } from "./conn-state.js";
+import { send, sendError } from "./wire.js";
+import { issueChallenge, verifyChallenge } from "./auth.js";
 
-/**
- * Per-connection state. One of these exists for the life of a socket.
- *
- * `playerId` is not stable across a reconnect by design: a returning player adopts the
- * id of the seat they are restoring, so the rest of the room keeps treating them as the
- * same participant.
- */
-export interface ConnState {
-  playerId: string;
-  room: Room | null;
-  isSpectator: boolean;
-  remoteAddr: string | null;
-  /** Token bucket for the per-connection rate limit. */
-  tokens: number;
-  lastRefillAt: number;
-  /** Backoff against brute-forcing the 32^4 room-code space. */
-  spectateFailCount: number;
-  spectateBlockedUntil: number;
-  /** Set by `hello`. Null means the client hasn't introduced itself yet. */
-  protocolVersion: number | null;
-  /** In-flight auth nonce. Replaced by a new `auth_begin`, cleared once used. */
-  challenge: AuthChallenge | null;
-  /**
-   * The Mojang-confirmed account, or null for a guest.
-   *
-   * This is the ONLY source of a player's uuid. Anything the client says about its own
-   * identity is ignored, which is the entire point of the handshake.
-   */
-  verified: VerifiedAccount | null;
-}
+// Re-exported so existing importers (index.ts, tests) don't care that these moved.
+export type { ConnState } from "./conn-state.js";
+export { send, sendError } from "./wire.js";
 
 /**
  * Oldest protocol this build still speaks. Raise it when an old client would do
@@ -44,14 +19,6 @@ export const MIN_SUPPORTED_PROTOCOL = 1;
 /** How many spectate misses before a connection is timed out from trying again. */
 export const SPECTATE_FAIL_THRESHOLD = 5;
 export const SPECTATE_FAIL_BACKOFF_MS = 30_000;
-
-export function send(ws: WebSocket, msg: ServerMessage): void {
-  if (ws.readyState === ws.OPEN) ws.send(encode(msg));
-}
-
-export function sendError(ws: WebSocket, code: string, message: string): void {
-  send(ws, { type: "error", code, message });
-}
 
 /**
  * Route one validated client message.
@@ -134,6 +101,33 @@ export function handleClientMessage(
       if (!text) return;
       return state.room.broadcastWorldEvent(state.playerId, msg.kind, text.slice(0, 512));
     }
+  }
+}
+
+/**
+ * Tear down whatever this connection was holding.
+ *
+ * Lives here rather than inline in `index.ts` so the invariants it enforces — a seat is
+ * released, a finished room with nobody watching is deleted — are reachable from a test
+ * without standing up a WebSocket server.
+ */
+export function handleClose(ws: WebSocket, state: ConnState, rooms: RoomRegistry): void {
+  if (!state.room) return;
+
+  if (state.isSpectator) {
+    state.room.removeSpectator(ws);
+    // A finished room with nobody left in it has nothing more to show.
+    if (state.room.size() === 0 && state.room.status === "ended") {
+      rooms.delete(state.room.code);
+    }
+    return;
+  }
+
+  const { wasPlaying, pendingReconnect } = state.room.removePlayer(state.playerId);
+  if (state.room.size() === 0 && !wasPlaying && !pendingReconnect) {
+    rooms.delete(state.room.code);
+  } else if (!pendingReconnect) {
+    state.room.notifyJoin();
   }
 }
 

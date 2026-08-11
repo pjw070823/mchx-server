@@ -26,6 +26,13 @@ export interface RoomConfig {
   minIntervalBetweenClaimsMs: number;
   /** Pre-match countdown, once every player has reported `world_ready`. */
   countdownMs: number;
+  /**
+   * How long a match may sit waiting for `world_ready` before it is abandoned.
+   *
+   * Generous — generating a world on a slow disk is not misbehaviour. It only has to be
+   * short enough that the opponent isn't stuck on the waiting screen indefinitely.
+   */
+  readyTimeoutMs: number;
 }
 
 export const DEFAULT_ROOM_CONFIG: RoomConfig = {
@@ -34,6 +41,7 @@ export const DEFAULT_ROOM_CONFIG: RoomConfig = {
   minTimeToFirstClaimMs: 15_000,
   minIntervalBetweenClaimsMs: 1_000,
   countdownMs: 5_000,
+  readyTimeoutMs: 60_000,
 };
 
 /**
@@ -42,9 +50,9 @@ export const DEFAULT_ROOM_CONFIG: RoomConfig = {
  * `custom` — someone pressed 방 생성. There is a host, and only they may change
  * settings or start the match.
  *
- * `ranked` — the matchmaker built it from the queue. There is no host: settings come
- * from the ladder and the match starts on its own. Nothing creates these yet; the
- * distinction exists so the host-only guards have somewhere to *not* apply, rather
- * than being rewritten when the queue lands.
+ * `ranked` — the matchmaker built it from the queue. There is no host: settings are the
+ * fixed ladder preset and the match starts on its own. A ranked room is also one-shot —
+ * it does not return to `waiting` for a rematch, because a rematch would put a room
+ * with a known code back on the joinable list.
  */
 export type RoomOrigin = "custom" | "ranked";

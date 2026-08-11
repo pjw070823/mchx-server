@@ -8,7 +8,7 @@ import { decode } from "./protocol.js";
 import { RoomRegistry } from "./room.js";
 import { ALL_MISSIONS } from "./missions.js";
 import { mountApiRoutes } from "./api-routes.js";
-import { handleClientMessage, sendError, type ConnState } from "./handlers.js";
+import { handleClientMessage, handleClose, sendError, type ConnState } from "./handlers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -144,6 +144,8 @@ wss.on("connection", (ws, req) => {
     protocolVersion: null,
     challenge: null,
     verified: null,
+    queueCooldownUntil: 0,
+    isAlive: true,
   };
   conns.set(ws, state);
   console.log(`[ws] connect ${state.playerId} from ${remoteAddr ?? "?"}`);
@@ -181,24 +183,7 @@ wss.on("connection", (ws, req) => {
       if (current <= 1) connsByIp.delete(remoteAddr);
       else connsByIp.set(remoteAddr, current - 1);
     }
-
-    if (!state.room) return;
-
-    if (state.isSpectator) {
-      state.room.removeSpectator(ws);
-      // A finished room with nobody left in it has nothing more to show.
-      if (state.room.size() === 0 && state.room.status === "ended") {
-        rooms.delete(state.room.code);
-      }
-      return;
-    }
-
-    const { wasPlaying, pendingReconnect } = state.room.removePlayer(state.playerId);
-    if (state.room.size() === 0 && !wasPlaying && !pendingReconnect) {
-      rooms.delete(state.room.code);
-    } else if (!pendingReconnect) {
-      state.room.notifyJoin();
-    }
+    handleClose(ws, state, rooms);
   });
 });
 

@@ -66,6 +66,11 @@ export class MatchEngine {
    * Record that a player's world has finished loading. Once everyone has reported in,
    * arm the countdown and return the instant play begins; null while still waiting.
    */
+  /** Whether this player's world has reported in. Used to name the side that stalled. */
+  isReady(playerId: string): boolean {
+    return this.readyPlayers.has(playerId);
+  }
+
   markReady(playerId: string, requiredCount: number): number | null {
     if (!this.board || this.activeAt !== null) return null;
     this.readyPlayers.add(playerId);

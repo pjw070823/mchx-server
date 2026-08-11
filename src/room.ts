@@ -13,7 +13,7 @@ import { DEFAULT_ELO, getOrCreatePlayer } from "./db.js";
 import { MatchEngine } from "./match-engine.js";
 import { RoomBroadcaster } from "./broadcaster.js";
 import { settleMatch } from "./settlement.js";
-import { applySettingsPatch } from "./settings-policy.js";
+import { applySettingsPatch, RANKED_SETTINGS } from "./settings-policy.js";
 import { tierOf } from "./entitlements.js";
 import { toPlayerInfo, type PlayerSession } from "./session.js";
 import { DEFAULT_ROOM_CONFIG, type RoomConfig, type RoomOrigin } from "./room-config.js";
@@ -42,7 +42,7 @@ export class Room {
   readonly origin: RoomOrigin;
   status: RoomStatus = "waiting";
   hostId: string | null = null;
-  settings: RoomSettings = { ...DEFAULT_SETTINGS };
+  settings: RoomSettings;
 
   private readonly players = new Map<string, PlayerSession>();
   private readonly spectators = new Set<WebSocket>();
@@ -61,9 +61,25 @@ export class Room {
    */
   private emptiedAt: number | null = Date.now();
 
+  /**
+   * When the current match finished, or null if one has never finished here.
+   *
+   * A custom room goes straight back to `waiting` and empties normally, so [emptiedAt]
+   * collects it. A ranked room stays `ended` with both players still seated — which
+   * means `size() > 0`, `emptiedAt === null`, and the idle rule can never take it. This
+   * is the second hand on the reaper's clock.
+   */
+  private endedAt: number | null = null;
+
+  /** Fires if the clients never both report `world_ready`. See [beginMatch]. */
+  private readyTimer: NodeJS.Timeout | null = null;
+
   constructor(config: Partial<RoomConfig> = {}, origin: RoomOrigin = "custom") {
     this.code = newRoomCode();
     this.origin = origin;
+    // Ranked settings are fixed at construction, which is what makes them
+    // unbypassable — there is no later point where a client could set them.
+    this.settings = origin === "ranked" ? { ...RANKED_SETTINGS } : { ...DEFAULT_SETTINGS };
     this.config = { ...DEFAULT_ROOM_CONFIG, ...config };
     this.engine = new MatchEngine(this.config);
     this.bus = new RoomBroadcaster(this.code, this.players, this.spectators);
@@ -87,6 +103,11 @@ export class Room {
   /** Idle-TTL probe. The timestamp this room went empty, or null if occupied. */
   idleSince(): number | null {
     return this.emptiedAt;
+  }
+
+  /** Reap probe for finished rooms that never emptied. Null until a match ends. */
+  endedSince(): number | null {
+    return this.status === "ended" ? this.endedAt : null;
   }
 
   private touchEmpty(): void {
@@ -327,6 +348,7 @@ export class Room {
     this.engine.begin();
     this.status = "playing";
     this.matchSettled = false;
+    this.endedAt = null;
     // Clear per-match session state so gates and grace timers don't carry over.
     for (const p of this.players.values()) {
       p.lastClaimAt = null;
@@ -335,6 +357,40 @@ export class Room {
     }
     for (const p of this.players.values()) this.sendMatchSnapshot(p.ws, p);
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
+    this.armReadyTimeout();
+  }
+
+  /**
+   * Give up on a match nobody can start.
+   *
+   * A client whose socket is fine but whose world never generates simply never sends
+   * `world_ready`, and there was no deadline on that at all — the opponent sat on the
+   * waiting screen forever. Custom rooms had the same hole, but ranked makes it
+   * reachable by a stranger you were paired with, so it needs an answer.
+   */
+  private armReadyTimeout(): void {
+    this.clearReadyTimeout();
+    this.readyTimer = setTimeout(() => {
+      this.readyTimer = null;
+      if (this.status !== "playing" || this.engine.isArmed) return;
+
+      const stalled = [...this.players.values()].filter((p) => !this.engine.isReady(p.id));
+      // Everyone stalled: no one to award it to, so end it with no winner.
+      if (stalled.length === this.players.size) {
+        console.warn(`[room ${this.code}] no world ready in time — ending with no winner`);
+        this.endMatch(null, "disconnect", null);
+        return;
+      }
+      const loser = stalled[0]!;
+      console.warn(`[room ${this.code}] ${loser.name} never reported world_ready — forfeiting`);
+      this.endByForfeit(loser.id, "disconnect");
+    }, this.config.readyTimeoutMs);
+  }
+
+  private clearReadyTimeout(): void {
+    if (this.readyTimer === null) return;
+    clearTimeout(this.readyTimer);
+    this.readyTimer = null;
   }
 
   /** A player's world finished loading. Arms the countdown once everyone is in. */
@@ -342,7 +398,9 @@ export class Room {
     if (this.status !== "playing") return;
     if (!this.players.has(playerId)) return;
     const startsAt = this.engine.markReady(playerId, this.players.size);
-    if (startsAt !== null) this.bus.toEveryone({ type: "countdown_start", startsAt });
+    if (startsAt === null) return;
+    this.clearReadyTimeout();
+    this.bus.toEveryone({ type: "countdown_start", startsAt });
   }
 
   attemptClaim(playerId: string, tileId: TileId, missionId: string): void {
@@ -378,11 +436,18 @@ export class Room {
     reason: "connection" | "forfeit" | "disconnect",
     quitter: PlayerSession | null,
   ): void {
+    this.clearReadyTimeout();
     const eloChanges = this.matchSettled ? {} : this.settle(winnerSide, reason, quitter);
     this.matchSettled = true;
     this.status = "ended";
+    this.endedAt = Date.now();
     this.bus.toEveryone({ type: "match_end", winner: winnerSide, reason, eloChanges });
-    this.resetForRematch();
+
+    // Ranked rooms are one-shot. Returning to `waiting` would put a room whose code both
+    // players know back on the joinable list, and the ladder decides pairings, not a code.
+    // Clients still need the status change, hence the notify either way.
+    if (this.origin === "custom") this.resetForRematch();
+    else this.notifyJoin();
   }
 
   private settle(
@@ -498,6 +563,7 @@ export class Room {
     return {
       code: this.code,
       status: this.status,
+      origin: this.origin,
       capacity: this.requiredPlayers(),
       settings: this.settings,
       hostId: this.hostId,
@@ -521,6 +587,8 @@ export class Room {
 export interface RoomSummary {
   code: string;
   status: RoomStatus;
+  /** 랭크 방인지 커스텀 방인지. 목록에서 태그를 정확히 붙이려면 필요합니다. */
+  origin: RoomOrigin;
   capacity: number;
   settings: RoomSettings;
   hostId: string | null;
@@ -558,7 +626,9 @@ export class RoomRegistry {
   }
 
   delete(code: string): void {
-    this.rooms.delete(code);
+    // Uppercase to match `get`. Generated codes are already uppercase so this is a
+    // no-op for every current caller, but the asymmetry was a trap left lying around.
+    this.rooms.delete(code.toUpperCase());
   }
 
   /** Rooms worth showing on the public listing. */
@@ -588,14 +658,23 @@ export class RoomRegistry {
    * Delete rooms that have sat empty for `ttlMs`. The inline disconnect cleanup handles
    * the normal path; this catches what it misses — a create whose first join failed, or
    * a room everyone dropped out of at once. Rooms awaiting a reconnect are spared.
+   *
+   * The second rule covers finished rooms that never went empty. A ranked room stays
+   * `ended` with both players still seated until their clients send `leave_room`, so
+   * `idleSince()` is null the whole time and the first rule can never reach it — left
+   * alone it would live as long as the process. Custom rooms never sit in `ended`
+   * (they return to `waiting`), so in practice this only ever fires for ranked.
    */
   reapIdle(ttlMs: number): number {
     let n = 0;
     const now = Date.now();
     for (const [code, room] of this.rooms) {
-      const since = room.idleSince();
-      if (since === null) continue;
       if (room.hasPendingReconnect()) continue;
+
+      const idle = room.idleSince();
+      const ended = room.endedSince();
+      const since = idle ?? ended;
+      if (since === null) continue;
       if (now - since < ttlMs) continue;
       this.rooms.delete(code);
       n++;

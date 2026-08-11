@@ -1,85 +1,17 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
-import type { WebSocket } from "ws";
-// Type-only: erased at compile time, so it does NOT pull db.ts in before the env var below.
 import type { RoomConfig } from "../src/room.js";
-
-// `db.ts` opens (and migrates) its SQLite file at import time. Point it at a throwaway
-// directory BEFORE the module graph loads — hence the dynamic import further down.
-process.env.MCHX_DB_PATH = join(mkdtempSync(join(tmpdir(), "mchx-test-")), "test.sqlite");
+// Sets MCHX_DB_PATH as a side effect. Must come before the dynamic import below.
+import {
+  A_WINNING_CHAIN, boardOf, FAST, FakeWs, missionFor, muteConsole, seat, VERIFIED,
+} from "./helpers.js";
 
 const { Room, RoomRegistry } = await import("../src/room.js");
-type RoomInstance = InstanceType<typeof Room>;
 
-/**
- * Room logs every outbound frame with console.log. Silence it so test output stays
- * readable; restore afterwards so a failure report isn't swallowed.
- */
-const origLog = console.log;
-const origWarn = console.warn;
-before(() => {
-  console.log = () => {};
-  console.warn = () => {};
-});
-after(() => {
-  console.log = origLog;
-  console.warn = origWarn;
-});
-
-interface Frame {
-  type: string;
-  [key: string]: unknown;
-}
-
-/** Minimal stand-in for a `ws` socket — Room only touches readyState/OPEN/send. */
-class FakeWs {
-  readonly OPEN = 1;
-  readyState = 1;
-  readonly sent: Frame[] = [];
-
-  send(payload: string): void {
-    this.sent.push(JSON.parse(payload) as Frame);
-  }
-
-  /** Simulate the socket dropping. */
-  drop(): void {
-    this.readyState = 3;
-  }
-
-  all(type: string): Frame[] {
-    return this.sent.filter((f) => f.type === type);
-  }
-
-  last(type: string): Frame | undefined {
-    return this.all(type).at(-1);
-  }
-
-  clear(): void {
-    this.sent.length = 0;
-  }
-
-  get ws(): WebSocket {
-    return this as unknown as WebSocket;
-  }
-}
-
-/** Gates collapsed to zero so a test can legally claim immediately. */
-const FAST: Partial<RoomConfig> = {
-  minTimeToFirstClaimMs: 0,
-  minIntervalBetweenClaimsMs: 0,
-  countdownMs: 0,
-  reconnectGraceMs: 20,
-};
-
-function seat(room: RoomInstance, id: string, name: string, uuid: string | null = null, addr: string | null = null) {
-  const sock = new FakeWs();
-  const session = room.addPlayer(id, name, uuid, sock.ws, addr);
-  return { sock, session };
-}
+let restoreConsole: () => void;
+before(() => { restoreConsole = muteConsole(); });
+after(() => restoreConsole());
 
 /**
  * A 2-player room already in `playing` with the countdown elapsed.
@@ -99,24 +31,6 @@ function playingRoom(
   room.markReady("p2");
   return { room, a, b };
 }
-
-/** Two Mojang-verified accounts, i.e. a match that is allowed to count. */
-const VERIFIED = { a: "11111111-1111-4111-8111-111111111111", b: "22222222-2222-4222-8222-222222222222" };
-
-function boardOf(sock: FakeWs): Array<{ tileId: string; missionId: string }> {
-  const snapshot = sock.last("match_start");
-  assert.ok(snapshot, "expected a match_start snapshot");
-  return snapshot.board as Array<{ tileId: string; missionId: string }>;
-}
-
-function missionFor(board: Array<{ tileId: string; missionId: string }>, tile: string): string {
-  const found = board.find((t) => t.tileId === tile);
-  assert.ok(found, `tile ${tile} missing from board`);
-  return found.missionId;
-}
-
-/** The straight r=0..4 column that wins for side A. */
-const A_WINNING_CHAIN = ["0,0", "0,1", "0,2", "0,3", "0,4"];
 
 describe("Room — seating", () => {
   it("makes the first player host and assigns sides A then B", () => {
@@ -376,6 +290,118 @@ describe("Room — winning", () => {
   });
 });
 
+describe("Room — ranked rooms", () => {
+  /** A ranked room the matchmaker would have built: no host, fixed settings. */
+  function rankedRoom(config: Partial<RoomConfig> = FAST) {
+    const room = new Room(config, "ranked");
+    const a = seat(room, "p1", "Alice", VERIFIED.a);
+    const b = seat(room, "p2", "Bob", VERIFIED.b);
+    room.start();
+    room.markReady("p1");
+    room.markReady("p2");
+    return { room, a, b };
+  }
+
+  function winAsA(room: InstanceType<typeof Room>, sock: FakeWs) {
+    const board = boardOf(sock);
+    for (const tile of A_WINNING_CHAIN) room.attemptClaim("p1", tile, missionFor(board, tile));
+  }
+
+  it("has no host and refuses every host-only command", () => {
+    const room = new Room(FAST, "ranked");
+    seat(room, "p1", "Alice", VERIFIED.a);
+
+    assert.equal(room.hostId, null, "a ranked room must never promote a host");
+    assert.equal(room.startMatchByHost("p1").reason, "not_host");
+    assert.equal(room.updateSettings("p1", { rated: false }), false);
+  });
+
+  it("uses the fixed ladder preset, not whatever a custom room defaults to", () => {
+    const room = new Room(FAST, "ranked");
+    // `rated` is the load-bearing one: nothing may opt a ranked match out of rating.
+    assert.equal(room.settings.rated, true);
+    assert.equal(room.settings.gameMode, "1v1");
+  });
+
+  it("stays ended after a match instead of reopening for a rematch", () => {
+    const { room, a } = rankedRoom();
+    winAsA(room, a.sock);
+
+    assert.equal(room.status, "ended");
+    // A stranger holding the code must not be able to take a freed seat.
+    room.forceRemovePlayer("p2");
+    assert.equal(room.addPlayer("p3", "Mallory", null, new FakeWs().ws), null);
+  });
+
+  it("releases both accounts as soon as the match ends", () => {
+    // Otherwise neither player could re-queue until the room was reaped.
+    const registry = new RoomRegistry();
+    const room = registry.create(FAST, "ranked");
+    const a = seat(room, "p1", "Alice", VERIFIED.a);
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.start();
+    room.markReady("p1");
+    room.markReady("p2");
+    winAsA(room, a.sock);
+
+    assert.equal(registry.findRoomContainingUuid(VERIFIED.a), null);
+    assert.equal(registry.findRoomContainingUuid(VERIFIED.b), null);
+    assert.equal(registry.listActive().length, 0, "an ended room is not worth listing");
+  });
+
+  it("still lets a custom room rematch", () => {
+    // Guard against over-applying the ranked fix to the path it must not touch.
+    const { room, a } = playingRoom();
+    winAsA(room, a.sock);
+    assert.equal(room.status, "waiting");
+  });
+
+  it("reports its origin in the public summary", () => {
+    assert.equal(new Room(FAST, "ranked").summary().origin, "ranked");
+    assert.equal(new Room(FAST).summary().origin, "custom");
+  });
+});
+
+describe("Room — world_ready deadline", () => {
+  it("forfeits the side whose world never loaded", async () => {
+    const room = new Room({ ...FAST, readyTimeoutMs: 20 }, "ranked");
+    const a = seat(room, "p1", "Alice", VERIFIED.a);
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.start();
+    room.markReady("p1"); // Bob never reports in
+
+    await new Promise((r) => setTimeout(r, 60));
+
+    const ended = a.sock.last("match_end");
+    assert.ok(ended, "a match nobody can start must not hang forever");
+    assert.equal(ended.winner, "A", "the side that was ready should be awarded the win");
+  });
+
+  it("ends with no winner when neither side loaded", () => {
+    // Nobody earned it, so nobody gets it.
+    const room = new Room({ ...FAST, readyTimeoutMs: 20 }, "ranked");
+    const a = seat(room, "p1", "Alice", VERIFIED.a);
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.start();
+
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        const ended = a.sock.last("match_end");
+        assert.ok(ended);
+        assert.equal(ended.winner, null);
+        resolve();
+      }, 60);
+    });
+  });
+
+  it("does not fire once both worlds are in", async () => {
+    const { room, a } = playingRoom({ ...FAST, readyTimeoutMs: 20 });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(a.sock.all("match_end").length, 0);
+    assert.equal(room.status, "playing");
+  });
+});
+
 describe("Room — leaving and disconnects", () => {
   it("settles an explicit mid-match leave as a forfeit for the opponent", () => {
     const { room, b } = playingRoom();
@@ -555,6 +581,37 @@ describe("RoomRegistry", () => {
     assert.equal(reg.reapIdle(0), 1);
     assert.equal(reg.get(empty.code), undefined);
     assert.equal(reg.get(occupied.code)?.code, occupied.code);
+  });
+
+  it("reaps a finished ranked room whose players are still seated", () => {
+    // The idle rule can never see this one: both seats are still occupied, so
+    // `idleSince()` stays null and without the ended-room rule it would live forever.
+    const reg = new RoomRegistry();
+    const room = reg.create(FAST, "ranked");
+    const a = seat(room, "p1", "Alice", VERIFIED.a);
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.start();
+    room.markReady("p1");
+    room.markReady("p2");
+
+    const board = boardOf(a.sock);
+    for (const tile of A_WINNING_CHAIN) room.attemptClaim("p1", tile, missionFor(board, tile));
+
+    assert.equal(room.size(), 2, "both players are still connected");
+    assert.equal(room.idleSince(), null, "so the idle rule cannot apply");
+    assert.equal(reg.reapIdle(0), 1);
+    assert.equal(reg.get(room.code), undefined);
+  });
+
+  it("spares a ranked room that is still playing", () => {
+    const reg = new RoomRegistry();
+    const room = reg.create(FAST, "ranked");
+    seat(room, "p1", "Alice", VERIFIED.a);
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.start();
+
+    assert.equal(reg.reapIdle(0), 0);
+    assert.equal(reg.get(room.code)?.code, room.code);
   });
 
   it("spares a room that is waiting on a reconnect", () => {
