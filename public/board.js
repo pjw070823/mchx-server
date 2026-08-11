@@ -119,6 +119,114 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
   holder.appendChild(grid);
 }
 
+/* ------------------------------------------------- 관전·리플레이 공통 골격 */
+
+/**
+ * 목업의 관전 화면 마크업. 실시간 관전과 리플레이가 같은 틀을 쓰고, 다른 건 시계에
+ * 무엇을 넣느냐와 보드 아래 재생 컨트롤이 붙느냐뿐입니다. `#board` 는 비워 두고
+ * 호출한 쪽이 [renderBoard] 로 채웁니다.
+ */
+function specMarkup(vm, L) {
+  const esc = escapeHtml;
+  const sel = vm.sel;
+  const left = vm.total - vm.a - vm.b;
+  return `
+    <a class="back" href="${vm.backHref}">${vm.backLabel}</a>
+    <div class="spec">
+      <div class="spec-main">
+        <div class="spec-head">
+          <div class="spec-vs">
+            <div class="spec-p">
+              <div class="nm"><span class="dot a"></span><span>${esc(vm.nameA)}</span></div>
+              <div class="sub">${esc(vm.subA)}</div>
+            </div>
+            <div class="vs">vs</div>
+            <div class="spec-p">
+              <div class="nm"><span class="dot b"></span><span>${esc(vm.nameB)}</span></div>
+              <div class="sub">${esc(vm.subB)}</div>
+            </div>
+          </div>
+          <div class="spec-clock">
+            <b>${esc(vm.clock)}</b>
+            <span>${esc(vm.caption)}</span>
+          </div>
+        </div>
+
+        <div class="board-hold" id="board"></div>
+
+        ${vm.winner
+          ? `<div class="winner"><span class="dot" style="background:${vm.winner.side === "B" ? "#C77CFA" : "#4A7BFA"}"></span><span>${esc(vm.winner.text)}</span></div>`
+          : ""}
+
+        ${vm.controls ?? ""}
+      </div>
+
+      <div class="spec-side">
+        <div class="spec-sec">
+          <div class="spec-k">${L.selTile}</div>
+          <div class="sel-name">${esc(sel.label)}</div>
+          ${sel.detail ? `<div class="sel-detail">${esc(sel.detail)}</div>` : ""}
+          ${sel.coord ? `<div class="sel-chips"><span class="chip">${esc(sel.coord)}</span><span class="chip ${sel.ownerCls}">${esc(sel.owner)}</span></div>` : ""}
+        </div>
+        <div class="counts">
+          <div>
+            <div class="spec-k">${L.claimedK}</div>
+            <div class="n"><span class="a">${vm.a}</span><span class="s">/</span><span class="b">${vm.b}</span></div>
+          </div>
+          <div class="prog">
+            <div class="spec-k">${L.chainK}</div>
+            <div class="bar"><i style="width:${vm.total ? Math.round(((vm.a + vm.b) / vm.total) * 100) : 0}%"></i></div>
+            <div class="lbl">${left} / ${vm.total}</div>
+          </div>
+        </div>
+        <div class="log">
+          <div class="spec-k">${L.eventLog}</div>
+          <ol>${vm.log.map((e) => logRow(e, L)).join("")}</ol>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function logRow(e, L) {
+  const esc = escapeHtml;
+  const side = e.side.toLowerCase();
+  return `
+    <li>
+      <span class="t">${esc(e.time)}</span>
+      <span class="dot ${side}"></span>
+      <span class="msg"><span class="who ${side}">${esc(e.who)}</span> ${esc(L.claimedVerb)} <span class="what">${esc(e.label)}</span></span>
+    </li>`;
+}
+
+/** 선택한 칸의 오른쪽 패널 내용. 아직 아무것도 안 골랐으면 안내 문구만 나옵니다. */
+function selectedInfo(tileId, board, claimed, missions, L) {
+  const none = { label: L.pickTile, detail: "", coord: "", owner: "", ownerCls: "" };
+  if (!tileId) return none;
+  const tile = board.find((t) => t.tileId === tileId);
+  if (!tile) return none;
+  const claim = claimed.find((c) => c.tileId === tileId);
+  return {
+    label: missions.get(tile.missionId)?.displayName ?? tile.missionId,
+    detail: tile.difficulty.toUpperCase(),
+    coord: tile.tileId,
+    owner: claim ? `${claim.side} ${L.claimedVerb.replace("·", "").trim()}` : L.unclaimed,
+    ownerCls: claim ? claim.side.toLowerCase() : "",
+  };
+}
+
+function countSides(claimed) {
+  let a = 0, b = 0;
+  for (const c of claimed) (c.side === "A" ? a++ : b++);
+  return { a, b };
+}
+
+/** mm:ss. 리플레이는 매치 시작 기준 경과, 관전은 현재 시각 기준 경과를 넣습니다. */
+function mmss(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 /* ---------------------------------------------------------------- 관전 */
 
 /**
@@ -143,94 +251,28 @@ export function mountSpectator(container, roomCode, L, lang) {
     tick: null,
   };
 
-  const esc = escapeHtml;
   const nameOf = (side) => s.players[side]?.name ?? "—";
   const eloOf = (side) => (s.players[side]?.elo != null ? `${s.players[side].elo} ELO · ` : "");
 
-  function counts() {
-    let a = 0, b = 0;
-    for (const c of s.claimed) (c.side === "A" ? a++ : b++);
-    return { a, b };
-  }
-
   function clockText() {
     if (!s.startedAt || s.status !== "playing") return "--:--";
-    const t = Math.max(0, Math.floor((Date.now() - s.startedAt) / 1000));
-    return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
-  }
-
-  function selectedInfo() {
-    if (!s.selected) return { label: L.pickTile, detail: "", coord: "", owner: "", ownerCls: "" };
-    const tile = s.board.find((t) => t.tileId === s.selected);
-    if (!tile) return { label: L.pickTile, detail: "", coord: "", owner: "", ownerCls: "" };
-    const m = s.missions.get(tile.missionId);
-    const claim = s.claimed.find((c) => c.tileId === s.selected);
-    return {
-      label: m?.displayName ?? tile.missionId,
-      detail: tile.difficulty.toUpperCase(),
-      coord: tile.tileId,
-      owner: claim ? `${claim.side} ${L.claimedVerb.replace("·", "").trim()}` : L.unclaimed,
-      ownerCls: claim ? claim.side.toLowerCase() : "",
-    };
+    return mmss(Date.now() - s.startedAt);
   }
 
   function draw() {
-    const { a, b } = counts();
-    const total = s.board.length || 25;
-    const sel = selectedInfo();
+    const { a, b } = countSides(s.claimed);
 
-    container.innerHTML = `
-      <a class="back" href="#/live">${L.backLive}</a>
-      <div class="spec">
-        <div class="spec-main">
-          <div class="spec-head">
-            <div class="spec-vs">
-              <div class="spec-p">
-                <div class="nm"><span class="dot a"></span><span>${esc(nameOf("A"))}</span></div>
-                <div class="sub">${eloOf("A")}${L.dirA}</div>
-              </div>
-              <div class="vs">vs</div>
-              <div class="spec-p">
-                <div class="nm"><span class="dot b"></span><span>${esc(nameOf("B"))}</span></div>
-                <div class="sub">${eloOf("B")}${L.dirB}</div>
-              </div>
-            </div>
-            <div class="spec-clock">
-              <b>${clockText()}</b>
-              <span>${s.conn ? esc(s.conn) : L.roomWord + esc(s.roomCode)}</span>
-            </div>
-          </div>
-
-          <div class="board-hold" id="board"></div>
-
-          ${s.winner ? `<div class="winner"><span class="dot" style="background:${s.winner.side === "B" ? "#C77CFA" : "#4A7BFA"}"></span><span>${esc(s.winner.text)}</span></div>` : ""}
-        </div>
-
-        <div class="spec-side">
-          <div class="spec-sec">
-            <div class="spec-k">${L.selTile}</div>
-            <div class="sel-name">${esc(sel.label)}</div>
-            ${sel.detail ? `<div class="sel-detail">${esc(sel.detail)}</div>` : ""}
-            ${sel.coord ? `<div class="sel-chips"><span class="chip">${esc(sel.coord)}</span><span class="chip ${sel.ownerCls}">${esc(sel.owner)}</span></div>` : ""}
-          </div>
-          <div class="counts">
-            <div>
-              <div class="spec-k">${L.claimedK}</div>
-              <div class="n"><span class="a">${a}</span><span class="s">/</span><span class="b">${b}</span></div>
-            </div>
-            <div class="prog">
-              <div class="spec-k">${L.chainK}</div>
-              <div class="bar"><i style="width:${Math.round(((a + b) / total) * 100)}%"></i></div>
-              <div class="lbl">${total - a - b} / ${total}</div>
-            </div>
-          </div>
-          <div class="log">
-            <div class="spec-k">${L.eventLog}</div>
-            <ol>${s.log.map(logRow).join("")}</ol>
-          </div>
-        </div>
-      </div>
-    `;
+    container.innerHTML = specMarkup({
+      backHref: "#/live", backLabel: L.backLive,
+      nameA: nameOf("A"), subA: eloOf("A") + L.dirA,
+      nameB: nameOf("B"), subB: eloOf("B") + L.dirB,
+      clock: clockText(),
+      caption: s.conn || L.roomWord + s.roomCode,
+      winner: s.winner,
+      sel: selectedInfo(s.selected, s.board, s.claimed, s.missions, L),
+      a, b, total: s.board.length || 25,
+      log: s.log,
+    }, L);
 
     renderBoard(container.querySelector("#board"), {
       board: s.board,
@@ -239,16 +281,6 @@ export function mountSpectator(container, roomCode, L, lang) {
       selected: s.selected,
       onSelect: (id) => { s.selected = id; draw(); },
     });
-  }
-
-  function logRow(e) {
-    const side = e.side.toLowerCase();
-    return `
-      <li>
-        <span class="t">${esc(e.time)}</span>
-        <span class="dot ${side}"></span>
-        <span class="msg"><span class="who ${side}">${esc(e.who)}</span> ${esc(L.claimedVerb)} <span class="what">${esc(e.label)}</span></span>
-      </li>`;
   }
 
   function pushLog(claim) {
@@ -333,10 +365,165 @@ export function mountSpectator(container, roomCode, L, lang) {
   };
 }
 
+/* -------------------------------------------------------------- 리플레이 */
+
+/** 자동 재생 시 한 수당 머무는 시간. 목업의 900ms 를 그대로 씁니다. */
+const REPLAY_STEP_MS = 900;
+
+/**
+ * 끝난 경기를 되감아 봅니다. 관전과 같은 틀에 보드 아래 재생 컨트롤이 붙습니다.
+ *
+ * `step` 은 "지금까지 놓인 수의 개수"입니다 — 0 이면 빈 판, 마지막이면 최종 국면.
+ * 정리 함수를 돌려줍니다.
+ */
+export function mountReplay(container, matchId, L, lang) {
+  const s = {
+    data: null,
+    missions: new Map(),
+    step: 0,
+    playing: false,
+    selected: null,
+    timer: null,
+    error: "",
+  };
+
+  const stateLine = (msg) => `<div class="wrap"><div class="state">${escapeHtml(msg)}</div></div>`;
+
+  function stop() {
+    if (s.timer) { clearInterval(s.timer); s.timer = null; }
+    s.playing = false;
+  }
+
+  function play() {
+    if (s.playing) return stop();
+    // 끝에서 재생을 누르면 처음부터 다시 봅니다.
+    if (s.step >= s.data.claims.length) s.step = 0;
+    s.playing = true;
+    s.timer = setInterval(() => {
+      if (s.step >= s.data.claims.length) { stop(); draw(); return; }
+      s.step++;
+      draw();
+    }, REPLAY_STEP_MS);
+  }
+
+  /** 지금 step 까지의 점령 목록. 되감기가 있으니 매번 앞에서부터 자릅니다. */
+  function claimsNow() {
+    return s.data.claims.slice(0, s.step);
+  }
+
+  function clockText() {
+    if (s.step === 0 || !s.data.startedAt) return "00:00";
+    const last = s.data.claims[s.step - 1];
+    return mmss((last?.claimedAt ?? s.data.startedAt) - s.data.startedAt);
+  }
+
+  function winnerBanner() {
+    // 마지막 수까지 감았을 때만 결과를 밝힙니다 — 중간에 띄우면 스포일러입니다.
+    if (s.step < s.data.claims.length) return null;
+    const side = s.data.winnerSide;
+    const who = side ? (s.data.players[side]?.name ?? side) : null;
+    const reason = s.data.reason ?? "";
+    return {
+      side: side ?? "A",
+      text: who
+        ? (lang === "ko" ? `${who} 승리 — 경기 종료 (${reason})` : `${who} wins — match over (${reason})`)
+        : (lang === "ko" ? `무승부로 종료 (${reason})` : `Ended with no winner (${reason})`),
+    };
+  }
+
+  function controls() {
+    const total = s.data.claims.length;
+    return `
+      <div class="pb">
+        <button class="pb-btn" id="pbPlay" type="button"
+                aria-label="${s.playing ? L.pause : L.play}">${s.playing ? "❚❚" : "▶"}</button>
+        <input class="pb-range" id="pbRange" type="range" min="0" max="${total}" step="1" value="${s.step}" />
+        <div class="pb-lbl">${s.step} / ${total}</div>
+      </div>
+    `;
+  }
+
+  function nameOf(side) {
+    return s.data.players[side]?.name ?? "—";
+  }
+
+  /** 레이팅은 이 경기 결과가 반영된 값을 쓰되, 무산정 경기면 표시하지 않습니다. */
+  function eloOf(side) {
+    const p = s.data.players[side];
+    const elo = p?.eloAfter ?? p?.eloBefore;
+    return elo != null ? `${elo} ELO · ` : "";
+  }
+
+  function logEntries() {
+    return claimsNow()
+      .slice()
+      .reverse()
+      .map((c) => ({
+        time: s.data.startedAt ? mmss(c.claimedAt - s.data.startedAt) : "--:--",
+        side: c.side,
+        who: nameOf(c.side),
+        label: s.missions.get(c.missionId)?.displayName ?? c.missionId,
+      }));
+  }
+
+  function draw() {
+    if (s.error) { container.innerHTML = stateLine(s.error); return; }
+    if (!s.data) { container.innerHTML = stateLine(L.loading); return; }
+
+    const claimed = claimsNow();
+    const { a, b } = countSides(claimed);
+    const dateLine = new Date(s.data.endedAt).toLocaleDateString(lang === "ko" ? "ko-KR" : "en-GB");
+
+    container.innerHTML = specMarkup({
+      backHref: "#/replays", backLabel: L.backReplays,
+      nameA: nameOf("A"), subA: eloOf("A") + L.dirA,
+      nameB: nameOf("B"), subB: eloOf("B") + L.dirB,
+      clock: clockText(),
+      caption: `${s.data.rated ? L.tagRanked : L.tagCasual} · ${dateLine}`,
+      winner: winnerBanner(),
+      sel: selectedInfo(s.selected, s.data.board, claimed, s.missions, L),
+      a, b, total: s.data.board.length || 25,
+      log: logEntries(),
+      controls: controls(),
+    }, L);
+
+    renderBoard(container.querySelector("#board"), {
+      board: s.data.board,
+      claimed,
+      missions: s.missions,
+      selected: s.selected,
+      onSelect: (id) => { s.selected = id; draw(); },
+    });
+
+    container.querySelector("#pbPlay")?.addEventListener("click", () => { play(); draw(); });
+    const range = container.querySelector("#pbRange");
+    range?.addEventListener("input", (ev) => {
+      stop();
+      s.step = Number(ev.target.value);
+      draw();
+      // 다시 그리면 노브가 사라지므로 초점을 되돌려 드래그가 이어지게 합니다.
+      container.querySelector("#pbRange")?.focus();
+    });
+  }
+
+  draw();
+  Promise.all([loadMissions(), fetchReplay(matchId)])
+    .then(([missions, data]) => { s.missions = missions; s.data = data; draw(); })
+    .catch((err) => { s.error = err?.message === "not_found" ? L.replayGone : L.replayFailed; draw(); });
+
+  return () => stop();
+}
+
+async function fetchReplay(id) {
+  const res = await fetch(`/api/matches/${encodeURIComponent(id)}/replay`);
+  if (!res.ok) throw new Error(res.status === 404 ? "not_found" : "failed");
+  return res.json();
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
 
-export { loadMissions, escapeHtml };
+export { loadMissions, escapeHtml, mmss };

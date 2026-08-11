@@ -4,7 +4,7 @@
 // API 에서 옵니다. 목업이 자리표시자로 채워 둔 숫자(누적 판수, 평균 시간 등)는
 // 지어내지 않고 실제로 계산되는 것만 보여줍니다.
 
-import { mountSpectator, escapeHtml } from "/board.js";
+import { mountSpectator, mountReplay, escapeHtml, mmss } from "/board.js";
 
 const app = document.getElementById("app");
 
@@ -18,6 +18,8 @@ const state = {
   codeInput: "",
   codeError: false,
   rooms: [],
+  replays: [],
+  replaysTotal: null,
   ranks: [],
   stats: { pool: "—", players: "—", matches: "—" },
 };
@@ -54,6 +56,13 @@ const T = {
     selTile: "선택한 칸", claimedK: "점령 현황", chainK: "남은 칸", eventLog: "이벤트 로그",
     claimedVerb: "점령 ·", unclaimed: "빈 칸", pickTile: "칸을 누르면 목표가 보입니다.",
     roomWord: "방 ", dirA: "위 ↕ 아래", dirB: "좌 ↔ 우",
+    nav6: "리플레이", kReplays: "기록", replaysH: "지난 경기 다시 보기",
+    replaysNote: "끝난 판은 처음부터 되감아 볼 수 있습니다. 한 수씩 넘기거나 재생을 눌러 두면 순서대로 놓입니다.",
+    noReplays: "아직 끝난 판이 없습니다.",
+    backReplays: "← 지난 경기 목록", openReplay: "다시 보기 →",
+    play: "재생", pause: "일시정지", loading: "불러오는 중…",
+    replayGone: "그 경기 기록을 찾을 수 없습니다.", replayFailed: "기록을 불러오지 못했습니다.",
+    drawTag: "무승부", winTag: "승",
     kSeason: "랭킹", ranksH: "레이팅 순위표", noRanks: "아직 기록된 플레이어가 없습니다.",
     thRank: "순위", thPlayer: "플레이어", thWl: "전적", thPct: "승률",
     kInstall: "설치", dlH: "클라이언트 모드 내려받기",
@@ -87,6 +96,13 @@ const T = {
     selTile: "SELECTED TILE", claimedK: "CLAIMED", chainK: "TILES LEFT", eventLog: "EVENT LOG",
     claimedVerb: "claimed", unclaimed: "unclaimed", pickTile: "Pick a tile to read its objective.",
     roomWord: "ROOM ", dirA: "top ↕ bottom", dirB: "left ↔ right",
+    nav6: "Replays", kReplays: "ARCHIVE", replaysH: "Watch a finished match",
+    replaysNote: "Every finished board can be replayed from the first claim. Step through it, or hit play and let it deal itself out.",
+    noReplays: "No finished matches yet.",
+    backReplays: "← ALL REPLAYS", openReplay: "Replay →",
+    play: "Play", pause: "Pause", loading: "Loading…",
+    replayGone: "No record of that match.", replayFailed: "Could not load that replay.",
+    drawTag: "DRAW", winTag: "WON",
     kSeason: "LADDER", ranksH: "Rated leaderboard", noRanks: "No rated players yet.",
     thRank: "RANK", thPlayer: "PLAYER", thWl: "W / L", thPct: "WIN %",
     kInstall: "INSTALL", dlH: "Get the client mod",
@@ -182,6 +198,7 @@ function header() {
       <nav class="hdr-nav">
         <a href="#/"${on("home") ? ' class="on"' : ""}>${L.nav1}</a>
         <a href="#/live"${on("live") || on("spectate") ? ' class="on"' : ""}>${L.nav3}</a>
+        <a href="#/replays"${on("replays") || on("replay") ? ' class="on"' : ""}>${L.nav6}</a>
         <a href="#/ranks"${on("ranks") ? ' class="on"' : ""}>${L.nav4}</a>
         <a href="#/install"${on("install") ? ' class="on"' : ""}>${L.nav5}</a>
       </nav>
@@ -380,6 +397,72 @@ function wireLive() {
   });
 }
 
+/* ---------------------------------------------------------- 화면: 리플레이 */
+
+function replayRow(m) {
+  const L = t();
+  const size = m.boardSize || 25;
+  const a = m.players?.A ?? {};
+  const b = m.players?.B ?? {};
+  const tag = m.rated ? L.tagRanked : L.tagCasual;
+  const dur = m.startedAt && m.endedAt ? mmss(m.endedAt - m.startedAt) : "--:--";
+
+  // 승자 쪽 이름에 점을 채워 표시합니다. 목록만 보고도 결과를 알 수 있어야 합니다.
+  const side = (p, cls, won) => `
+    <div class="row-p">
+      <span class="dot ${cls}"${won ? "" : ' style="opacity:.35"'}></span>
+      <span class="nm">${escapeHtml(p.name ?? "—")}</span>
+      <span class="el">${p.elo ?? "—"}</span>
+    </div>`;
+
+  return `
+    <a class="row" href="#/replay/${m.id}">
+      <div class="row-tag ${m.rated ? "ranked" : "private"}">${tag}</div>
+      <div class="row-players">
+        ${side(a, "a", m.winnerSide === "A")}
+        <span class="row-vs">vs</span>
+        ${side(b, "b", m.winnerSide === "B")}
+      </div>
+      <div class="row-prog">
+        <div class="row-bar">
+          <div class="a" style="width:${pct(m.claimedA ?? 0, size)}"></div>
+          <div class="b" style="width:${pct(m.claimedB ?? 0, size)}"></div>
+        </div>
+        <div class="row-tiles">${m.claimedA ?? 0}–${m.claimedB ?? 0} · ${size}${state.lang === "ko" ? "칸" : " tiles"}</div>
+      </div>
+      <div class="row-clock">${dur}</div>
+      <div class="row-watch">${L.openReplay}</div>
+    </a>
+  `;
+}
+
+function totalLine() {
+  const n = state.replaysTotal;
+  if (n == null) return "—";
+  return state.lang === "ko" ? `누적 ${n}판` : `${n} played`;
+}
+
+function pageReplays() {
+  const L = t();
+  const rows = state.replays;
+  return `
+    <div class="wrap">
+      <div class="live-top">
+        <div>
+          <div class="kick live-kick"><span>${L.kReplays}</span><span class="bar"></span><span class="upd">${totalLine()}</span></div>
+          <h2 class="h-lg">${L.replaysH}</h2>
+        </div>
+        <div style="flex:0 1 380px;min-width:0">
+          <div class="code-note">${L.replaysNote}</div>
+        </div>
+      </div>
+      ${rows.length
+        ? `<div class="rows">${rows.map(replayRow).join("")}</div>`
+        : `<div class="rows"><div class="row" style="cursor:default"><div class="state" style="width:100%">${L.noReplays}</div></div></div>`}
+    </div>
+  `;
+}
+
 /* -------------------------------------------------------------- 화면: 랭킹 */
 
 function pageRanks() {
@@ -487,6 +570,26 @@ async function route() {
     state.page = "spectate";
     render(`<div class="wrap wrap-wide" id="spec"></div>`);
     cleanup = mountSpectator(document.getElementById("spec"), board[1].toUpperCase(), t(), state.lang);
+    return;
+  }
+
+  const replay = hash.match(/^#\/replay\/(\d+)$/);
+  if (replay) {
+    state.page = "replay";
+    render(`<div class="wrap wrap-wide" id="rep"></div>`);
+    cleanup = mountReplay(document.getElementById("rep"), replay[1], t(), state.lang);
+    return;
+  }
+
+  if (hash === "#/replays") {
+    state.page = "replays";
+    render(pageReplays());
+    try {
+      const { replays, total } = await api("/api/replays?limit=50");
+      state.replays = replays ?? [];
+      state.replaysTotal = total ?? null;
+    } catch { state.replays = []; }
+    render(pageReplays());
     return;
   }
 
