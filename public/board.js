@@ -134,7 +134,6 @@ export function mountSpectator(container, roomCode, L, lang) {
     board: [],
     claimed: [],
     status: "waiting",
-    seed: null,
     startedAt: null,
     players: { A: null, B: null },
     selected: null,
@@ -198,7 +197,7 @@ export function mountSpectator(container, roomCode, L, lang) {
             </div>
             <div class="spec-clock">
               <b>${clockText()}</b>
-              <span>${s.seed != null ? L.seedWord + esc(String(s.seed)) : esc(s.conn)}</span>
+              <span>${s.conn ? esc(s.conn) : L.roomWord + esc(s.roomCode)}</span>
             </div>
           </div>
 
@@ -277,7 +276,6 @@ export function mountSpectator(container, roomCode, L, lang) {
         s.status = "playing";
         s.board = msg.board;
         s.claimed = msg.claimed ?? [];
-        s.seed = msg.seed;
         s.startedAt = msg.startsAt;
         s.winner = null;
         draw(); return;

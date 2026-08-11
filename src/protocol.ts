@@ -178,7 +178,11 @@ export const ServerMessage = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("match_start"),
-    seed: z.bigint(),
+    /**
+     * Null for spectators. The seed reproduces the whole world, so handing it to an
+     * onlooker hands it to whoever they are relaying for.
+     */
+    seed: z.bigint().nullable(),
     yourSide: Side.nullable(),
     board: z.array(BoardTile),
     claimed: z.array(ClaimedTile),

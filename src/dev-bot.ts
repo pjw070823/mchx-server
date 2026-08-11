@@ -22,7 +22,12 @@ const PASSIVE = process.argv[3] === "passive";
  * Keep in sync with DEFAULT_ROOM_CONFIG.
  */
 const FIRST_CLAIM_GATE_MS = 15_000;
-const CLAIM_INTERVAL_MS = 1_000;
+/**
+ * How long the bots wait between claims. The server floor is 1s; raising it via
+ * MCHX_BOT_CLAIM_MS stretches the match out, which is the only way to keep a board
+ * on screen long enough to look at.
+ */
+const CLAIM_INTERVAL_MS = Math.max(1_000, Number(process.env.MCHX_BOT_CLAIM_MS) || 1_000);
 /** Headroom over each server-side gate so clock jitter doesn't trip a rejection. */
 const GATE_MARGIN_MS = 750;
 

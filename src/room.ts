@@ -476,7 +476,9 @@ export class Room {
     if (!this.engine.board || this.engine.startedAt === null) return;
     this.bus.send(ws, {
       type: "match_start",
-      seed: this.engine.seed,
+      // Spectators get no seed: it regenerates the entire board offline, so a player
+      // watching their own match on a second screen would see every mission in advance.
+      seed: viewer ? this.engine.seed : null,
       yourSide: viewer?.side ?? null,
       board: this.engine.board,
       claimed: [...this.engine.claimedLog],

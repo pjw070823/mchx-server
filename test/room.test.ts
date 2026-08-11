@@ -480,6 +480,19 @@ describe("Room — spectators", () => {
     assert.ok(spec.last("match_start"));
   });
 
+  it("withholds the seed from spectators but not from players", () => {
+    const { room, a, b } = playingRoom();
+    const spec = new FakeWs();
+    room.addSpectator(spec.ws);
+
+    // The seed regenerates the board offline, so a player watching their own match on a
+    // second screen would otherwise read every mission before claiming it.
+    // These are the parsed wire frames, so the 64-bit seed arrives as a decimal string.
+    assert.equal(spec.last("match_start")?.seed, null);
+    assert.match(String(a.sock.last("match_start")?.seed), /^-?\d+$/);
+    assert.match(String(b.sock.last("match_start")?.seed), /^-?\d+$/);
+  });
+
   it("caps the number of spectators", () => {
     const room = new Room({ ...FAST, maxSpectators: 2 });
     assert.equal(room.addSpectator(new FakeWs().ws), true);
