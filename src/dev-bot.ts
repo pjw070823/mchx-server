@@ -1,8 +1,13 @@
 // Dev-only: simulates two players claiming tiles to exercise the server + spectator UI.
 // Usage:
 //   npx tsx src/dev-bot.ts                  (auto-creates room, both bots play)
+//   npx tsx src/dev-bot.ts ranked           (both bots queue — exercises matchmaking)
 //   npx tsx src/dev-bot.ts ABCD             (joins existing room, plays randomly)
 //   npx tsx src/dev-bot.ts ABCD passive     (joins existing room, never claims — for human testing)
+//
+// `ranked` needs the server started with MCHX_DEV_QUEUE=1: bots have no Minecraft
+// account and share an address, which are the two things the queue refuses outright.
+// That is the point of the switch — it is also what keeps the resulting match unrated.
 //
 // Override the target with MCHX_WS=ws://host:port/ws.
 
@@ -11,7 +16,9 @@ import type { ServerMessage } from "./protocol.js";
 import { PROTOCOL_VERSION } from "./protocol.js";
 
 const URL = process.env.MCHX_WS ?? "ws://localhost:8787/ws";
-const ROOM_ARG = process.argv[2];
+const ARG = process.argv[2];
+const RANKED = ARG === "ranked";
+const ROOM_ARG = RANKED ? undefined : ARG;
 const PASSIVE = process.argv[3] === "passive";
 
 /**
@@ -49,7 +56,7 @@ interface BotState {
   playing: boolean;
 }
 
-function connectBot(name: string, mode: "create" | { join: string }): BotState {
+function connectBot(name: string, mode: "create" | "queue" | { join: string }): BotState {
   const ws = new WebSocket(URL);
   const state: BotState = {
     ws, name, side: null, board: [], claimed: new Set(), roomCode: null, playing: false,
@@ -60,7 +67,9 @@ function connectBot(name: string, mode: "create" | { join: string }): BotState {
     // unauthenticated on purpose — they have no Minecraft account, so their matches
     // are unrated, which is exactly what you want from a test harness.
     ws.send(JSON.stringify({ type: "hello", protocolVersion: PROTOCOL_VERSION, clientVersion: "dev-bot" }));
-    if (mode === "create") {
+    if (mode === "queue") {
+      ws.send(JSON.stringify({ type: "join_queue" }));
+    } else if (mode === "create") {
       ws.send(JSON.stringify({ type: "create_room", playerName: name }));
     } else {
       ws.send(JSON.stringify({ type: "join_room", roomCode: mode.join, playerName: name }));
@@ -94,6 +103,11 @@ function onMessage(state: BotState, msg: ServerMessage) {
       console.log(
         `[${state.name}] room=${msg.roomCode} status=${msg.status} you=${msg.you?.side ?? "?"} opp=${msg.opponent?.name ?? "—"}`,
       );
+      // Ranked rooms are built and started by the matchmaker: there is no second bot to
+      // spawn and no host to press start. Both branches below would be no-ops anyway
+      // (hostId is null for ranked), but gating them keeps the intent legible.
+      if (RANKED) return;
+
       if (
         msg.status === "waiting"
         && state.roomCode
@@ -147,6 +161,13 @@ function onMessage(state: BotState, msg: ServerMessage) {
       return;
     case "claim_rejected":
       console.warn(`[${state.name}] claim rejected ${msg.tileId}: ${msg.reason}`);
+      return;
+    case "queue_state":
+      console.log(
+        `[${state.name}] queue: queued=${msg.queued}` +
+          (msg.reason ? ` reason=${msg.reason}` : "") +
+          ` waited=${(msg.waitingMs / 1000).toFixed(1)}s size=${msg.size} elo=${msg.elo} window=±${msg.window}`,
+      );
       return;
   }
 }
@@ -207,7 +228,12 @@ function playLoop(state: BotState) {
   setTimeout(() => playLoop(state), CLAIM_INTERVAL_MS + GATE_MARGIN_MS);
 }
 
-if (ROOM_ARG) {
+if (RANKED) {
+  // Both go in at once. The matchmaker pairs them on its next tick and starts the
+  // match itself, so there is nothing else to drive from here.
+  connectBot("Alice", "queue");
+  connectBot("Bob", "queue");
+} else if (ROOM_ARG) {
   connectBot("Bob", { join: ROOM_ARG });
 } else {
   connectBot("Alice", "create");
