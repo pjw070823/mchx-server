@@ -3,21 +3,25 @@
 // 화면 구성과 보드는 목업을 그대로 옮겼습니다. 육각형은 clip-path 를 쓴 div 이고,
 // 마름모 바깥 변만 절대 배치한 SVG 로 겹쳐 그립니다.
 
-/** 모드가 붙는 API+WebSocket 포트. 관전 보드(:80)와는 다른 포트입니다. */
+/** 모드가 붙는 API+WebSocket 포트. 리버스 프록시가 없을 때만 씁니다. */
 const API_PORT = 8787;
 
 /**
  * 관전 소켓 주소.
  *
- * 같은 Node 프로세스가 두 포트로 서비스합니다 — API+WS 는 [API_PORT], 관전 보드는 :80.
- * 페이지가 :80 에서 왔으면 소켓은 다른 포트로 붙어야 하고, 그 외 포트에서 왔으면
- * 그 포트가 곧 API 포트입니다(개발 중 임의 포트로 띄우는 경우).
+ * HTTPS 로 열렸다면 앞에 리버스 프록시가 있다는 뜻입니다 — Node 는 TLS 를 직접 하지
+ * 않습니다. 그때는 같은 오리진의 `/ws` 로 붙어야 합니다. 여기서 포트를 덧붙이면
+ * `wss://도메인:8787/ws` 가 되는데, 그 포트에는 인증서가 없어 연결이 깨집니다.
+ *
+ * 평문일 때는 같은 Node 프로세스가 두 포트로 서비스합니다 — API+WS 는 [API_PORT],
+ * 관전 보드는 :80. 페이지가 :80 에서 왔으면 소켓은 다른 포트로 붙어야 하고, 그 외
+ * 포트에서 왔으면 그 포트가 곧 API 포트입니다(개발 중 임의 포트로 띄우는 경우).
  */
 function defaultWsUrl() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
+  if (location.protocol === "https:") return `wss://${location.host}/ws`;
   const port = location.port;
-  const wsPort = port && port !== "80" && port !== "443" ? port : API_PORT;
-  return `${proto}://${location.hostname}:${wsPort}/ws`;
+  const wsPort = port && port !== "80" ? port : API_PORT;
+  return `ws://${location.hostname}:${wsPort}/ws`;
 }
 
 async function loadMissions() {
