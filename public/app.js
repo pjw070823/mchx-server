@@ -1,47 +1,150 @@
-// Minecraft Hex — SPA router & view renderers.
-// Hash-based routing keeps everything as a single static page; views fetch
-// against the existing REST endpoints under /api/* (served on both 8787 and 80).
+// Minecraft Hex — 웹 UI.
+//
+// 화면 구성과 문구는 목업(Minecraft Hex.dc.html)을 그대로 옮긴 것이고, 값만 실제
+// API 에서 옵니다. 목업이 자리표시자로 채워 둔 숫자(누적 판수, 평균 시간 등)는
+// 지어내지 않고 실제로 계산되는 것만 보여줍니다.
 
-import { mountSpectator, renderBoardSvg, loadMissions, escapeHtml } from "/board.js";
+import { mountSpectator, escapeHtml } from "/board.js";
 
-const view = document.getElementById("view");
+const app = document.getElementById("app");
 
-// Skin avatar / body — mc-heads.net handles UUID → texture without API keys.
-function avatarUrl(uuid, size = 64) {
-  if (!uuid) return `https://mc-heads.net/avatar/MHF_Steve/${size}`;
-  return `https://mc-heads.net/avatar/${uuid}/${size}`;
-}
-function bodyUrl(uuid, size = 128) {
-  if (!uuid) return `https://mc-heads.net/body/MHF_Steve/${size}`;
-  return `https://mc-heads.net/body/${uuid}/${size}`;
-}
+/* ------------------------------------------------------------------ 상태 */
 
-function fmtDate(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return d.toLocaleString("ko-KR", { hour12: false });
-}
-function fmtDuration(start, end) {
-  if (!start || !end) return "—";
-  const ms = end - start;
-  const sec = Math.floor(ms / 1000);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}분 ${s}초`;
-}
-function winrate(w, l, d) {
-  const total = (w ?? 0) + (l ?? 0) + (d ?? 0);
-  if (total === 0) return "—";
-  return `${Math.round(((w ?? 0) / total) * 100)}%`;
-}
-function statusBadge(status) {
-  const labels = {
-    waiting: "대기", starting: "시작 중", playing: "진행 중", ended: "종료",
-  };
-  return `<span class="status-badge status-${status}">${labels[status] ?? status}</span>`;
+const state = {
+  page: "home",
+  lang: localStorage.getItem("mchx.lang") || "ko",
+  spectate: null,
+  os: detectOs(),
+  codeInput: "",
+  codeError: false,
+  rooms: [],
+  ranks: [],
+  stats: { pool: "—", players: "—", matches: "—" },
+};
+
+function detectOs() {
+  const p = navigator.platform || "";
+  if (/Mac/i.test(p)) return "mac";
+  if (/Linux/i.test(p) && !/Android/i.test(navigator.userAgent)) return "linux";
+  return "win";
 }
 
-// ---- fetch helpers ----------------------------------------------------------
+/* ------------------------------------------------------------------- 문구 */
+
+const T = {
+  ko: {
+    nav1: "소개", nav3: "중계", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
+    eyebrow: "패브릭 모드 · 마인크래프트 26.1.2",
+    h1a: "목표 25개를 두고", h1b: "벌이는 1대1 경주.",
+    heroP: "헥스는 마인크래프트 목표 25개를 5×5 육각 판에 깔고, 두 사람을 같은 시드의 월드에 떨어뜨립니다. 칸에 적힌 목표를 깨면 그 칸이 내 것이 되고, 자기 변에서 반대편 변까지 칸이 끊김 없이 이어지는 순간 판이 끝납니다.",
+    ctaWatch: "중계 보러 가기", ctaDl: "모드 내려받기",
+    statPool: "전체 목표", statPlayers: "등록 플레이어", statPlayed: "누적 판수",
+    rulesKicker: "규칙", rulesH: "목표 25개짜리 판 하나, 먼저 잇는 쪽이 이깁니다.",
+    r1: "64개 목표 중 25개가 뽑혀 5×5 육각 판에 깔립니다. 두 사람 모두 같은 판, 같은 시드로 시작합니다.",
+    r2: "목표를 깨면 그 칸이 내 색으로 넘어옵니다. 턴 순서도 없고, 한 번 넘어간 칸은 다시 뺏기지 않습니다.",
+    r3: "한쪽은 위아래, 다른 쪽은 좌우를 잇습니다. 자기 두 변이 끊김 없이 연결되는 순간 판이 끝납니다.",
+    rulesNote: "목표는 매 판 새로 뽑히기 때문에 같은 판이 두 번 나오는 일은 없습니다. 판이 끝나고 남는 건 레이팅뿐입니다.",
+    kLive: "중계", liveH: "진행 중인 판", updated: "방금 갱신", noLive: "지금 열려 있는 판이 없습니다.",
+    kPrivate: "비공개 경기", codePh: "코드", codeBtn: "보기",
+    codeNote: "비공개 판은 목록에 뜨지 않습니다. 받은 코드를 입력하세요.",
+    codeErr: "그 코드로 열린 판이 없습니다.",
+    backLive: "← 중계 목록",
+    tagRanked: "랭크", tagCasual: "일반", tagWaiting: "대기",
+    watch: "보기 →", waiting: "대기 중",
+    selTile: "선택한 칸", claimedK: "점령 현황", chainK: "남은 칸", eventLog: "이벤트 로그",
+    claimedVerb: "점령 ·", unclaimed: "빈 칸", pickTile: "칸을 누르면 목표가 보입니다.",
+    seedWord: "시드 ", dirA: "위 ↕ 아래", dirB: "좌 ↔ 우",
+    kSeason: "랭킹", ranksH: "레이팅 순위표", noRanks: "아직 기록된 플레이어가 없습니다.",
+    thRank: "순위", thPlayer: "플레이어", thWl: "전적", thPct: "승률",
+    kInstall: "설치", dlH: "클라이언트 모드 내려받기",
+    dlP: "모드는 직접 플레이할 때만 필요합니다. 중계는 아무것도 깔지 않아도 볼 수 있습니다.",
+    relLine: "패브릭 · 마인크래프트 26.1.2 · 아직 공개 배포 전입니다",
+    dlJar: "저장소 보기", changelog: "커밋 기록",
+    requires: "필요한 것", notRequired: "필요 없는 것",
+    nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "중계용 설치",
+    footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다", source: "소스",
+    stepsTitle: "설치 순서",
+  },
+  en: {
+    nav1: "Overview", nav3: "Live", nav4: "Ranks", nav5: "Install", getMod: "Get the mod",
+    eyebrow: "FABRIC CLIENT · MINECRAFT 26.1.2",
+    h1a: "A 1v1 race across", h1b: "twenty-five objectives.",
+    heroP: "Hex deals twenty-five Minecraft objectives onto a 5×5 hex board and drops both players into the same world seed. Finish what a tile says and the tile is yours. The match ends the moment one player's tiles run unbroken from their own edge to the far side.",
+    ctaWatch: "Watch a live match", ctaDl: "Get the client mod",
+    statPool: "OBJECTIVE POOL", statPlayers: "RATED PLAYERS", statPlayed: "MATCHES PLAYED",
+    rulesKicker: "THE RULES", rulesH: "Twenty-five objectives, one board, two edges to link.",
+    r1: "Twenty-five objectives are drawn from a pool of 64 and dealt onto a 5×5 hex board. Both players get the same board and the same world seed.",
+    r2: "Finishing an objective claims its tile. There is no turn order, nothing to spend, and a tile cannot be taken back once it is claimed.",
+    r3: "One player links top to bottom, the other left to right. First unbroken run of tiles between your own two edges ends the match.",
+    rulesNote: "Objectives are drawn fresh for every match, so the same board never comes up twice. Nothing carries over between games except your rating.",
+    kLive: "LIVE", liveH: "Live boards", updated: "just updated", noLive: "No boards are running right now.",
+    kPrivate: "PRIVATE MATCH", codePh: "CODE", codeBtn: "Watch",
+    codeNote: "Private boards are never listed. Enter the code the players gave you.",
+    codeErr: "No live board is running on that code.",
+    backLive: "← ALL LIVE MATCHES",
+    tagRanked: "RANKED", tagCasual: "CASUAL", tagWaiting: "WAITING",
+    watch: "Watch →", waiting: "waiting",
+    selTile: "SELECTED TILE", claimedK: "CLAIMED", chainK: "TILES LEFT", eventLog: "EVENT LOG",
+    claimedVerb: "claimed", unclaimed: "unclaimed", pickTile: "Pick a tile to read its objective.",
+    seedWord: "SEED ", dirA: "top ↕ bottom", dirB: "left ↔ right",
+    kSeason: "LADDER", ranksH: "Rated leaderboard", noRanks: "No rated players yet.",
+    thRank: "RANK", thPlayer: "PLAYER", thWl: "W / L", thPct: "WIN %",
+    kInstall: "INSTALL", dlH: "Get the client mod",
+    dlP: "You only need the mod to play. Watching boards on this site needs nothing installed.",
+    relLine: "Fabric · Minecraft 26.1.2 · not published yet",
+    dlJar: "View repository", changelog: "Commits",
+    requires: "REQUIRES", notRequired: "NOT REQUIRED",
+    nr1: "A server to host", nr2: "A separate account — your Minecraft account signs you in", nr3: "Anything installed to watch",
+    stepsTitle: "INSTALL STEPS",
+    footer: "MINECRAFT HEX · COMMUNITY PROJECT · NOT AFFILIATED WITH MOJANG", source: "Source",
+  },
+};
+const t = () => T[state.lang];
+
+const OS_STEPS = {
+  ko: {
+    win: [
+      { n: "01", title: "패브릭 로더 설치", body: "패브릭 인스톨러를 실행하고 26.1.2 를 고르면 런처에 프로필이 하나 새로 생깁니다." },
+      { n: "02", title: "의존 모드 두 개 넣기", body: "Fabric API 와 Fabric Language Kotlin 을 mods 폴더에 넣습니다. 둘 중 하나라도 없으면 모드가 로드되지 않습니다.", cmd: "%appdata%\\.minecraft\\mods" },
+      { n: "03", title: "mchx 넣기", body: "같은 폴더에 mchx jar 을 추가합니다. 타이틀 화면에 MCHX 로비 버튼이 생기면 정상입니다." },
+      { n: "04", title: "접속할 서버 바꾸기 (선택)", body: "기본값은 공식 서버입니다. 직접 띄운 서버를 쓸 때만 고치면 됩니다.", cmd: '{"serverUrl":"ws://내서버:8787/ws"}' },
+    ],
+    mac: [
+      { n: "01", title: "패브릭 로더 설치", body: "패브릭 인스톨러를 실행하고 26.1.2 를 고릅니다." },
+      { n: "02", title: "의존 모드 두 개 넣기", body: "Fabric API 와 Fabric Language Kotlin 을 mods 폴더에 넣습니다.", cmd: "~/Library/Application Support/minecraft/mods" },
+      { n: "03", title: "mchx 넣기", body: "같은 폴더에 추가합니다. 실행이 막히면 우클릭 후 열기를 한 번만 해 주면 됩니다." },
+      { n: "04", title: "접속할 서버 바꾸기 (선택)", body: "config/mchx.json 을 고칩니다.", cmd: '{"serverUrl":"ws://내서버:8787/ws"}' },
+    ],
+    linux: [
+      { n: "01", title: "패브릭 로더 설치", body: "터미널로 깔아도 됩니다. 버전만 명시해 주세요.", cmd: "java -jar fabric-installer.jar client -mcversion 26.1.2" },
+      { n: "02", title: "의존 모드 두 개 넣기", body: "Fabric API 와 Fabric Language Kotlin 을 mods 폴더에 넣습니다.", cmd: "~/.minecraft/mods" },
+      { n: "03", title: "mchx 넣기", body: "같은 폴더에 mchx jar 을 추가합니다." },
+      { n: "04", title: "접속할 서버 바꾸기 (선택)", body: "config/mchx.json 을 고칩니다.", cmd: '{"serverUrl":"ws://내서버:8787/ws"}' },
+    ],
+  },
+  en: {
+    win: [
+      { n: "01", title: "Install Fabric Loader", body: "Run the Fabric installer and pick Minecraft 26.1.2. It writes a new profile into your launcher." },
+      { n: "02", title: "Drop in both dependencies", body: "Fabric API and Fabric Language Kotlin both go in the mods folder. The mod will not load without them.", cmd: "%appdata%\\.minecraft\\mods" },
+      { n: "03", title: "Add mchx", body: "Put the mchx jar in the same folder. You'll see an MCHX button on the title screen." },
+      { n: "04", title: "Point at another server (optional)", body: "Only needed if you run your own.", cmd: '{"serverUrl":"ws://your-host:8787/ws"}' },
+    ],
+    mac: [
+      { n: "01", title: "Install Fabric Loader", body: "Run the Fabric installer and pick Minecraft 26.1.2." },
+      { n: "02", title: "Drop in both dependencies", body: "Fabric API and Fabric Language Kotlin both go in the mods folder.", cmd: "~/Library/Application Support/minecraft/mods" },
+      { n: "03", title: "Add mchx", body: "Same folder. If Gatekeeper blocks it, right-click and Open once." },
+      { n: "04", title: "Point at another server (optional)", body: "Edit config/mchx.json.", cmd: '{"serverUrl":"ws://your-host:8787/ws"}' },
+    ],
+    linux: [
+      { n: "01", title: "Install Fabric Loader", body: "A headless install works fine. Pass the version explicitly.", cmd: "java -jar fabric-installer.jar client -mcversion 26.1.2" },
+      { n: "02", title: "Drop in both dependencies", body: "Fabric API and Fabric Language Kotlin both go in the mods folder.", cmd: "~/.minecraft/mods" },
+      { n: "03", title: "Add mchx", body: "Put the mchx jar in the same folder." },
+      { n: "04", title: "Point at another server (optional)", body: "Edit config/mchx.json.", cmd: '{"serverUrl":"ws://your-host:8787/ws"}' },
+    ],
+  },
+};
+
+/* ------------------------------------------------------------------ 유틸 */
 
 async function api(path) {
   const res = await fetch(path);
@@ -49,916 +152,399 @@ async function api(path) {
   return res.json();
 }
 
-// ---- view: loading / error shells ------------------------------------------
-
-function showLoading() {
-  view.innerHTML = `<div class="loading">불러오는 중…</div>`;
-}
-function showError(err) {
-  view.innerHTML = `<div class="error-pane">오류: ${escapeHtml(err?.message ?? String(err))}</div>`;
+function clock(fromMs) {
+  if (!fromMs) return "--:--";
+  const s = Math.max(0, Math.floor((Date.now() - fromMs) / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-// ---- view: HOME -------------------------------------------------------------
-
-/**
- * 랜딩. 게임이 뭔지 모르는 사람이 처음 보는 화면이라, 규칙을 세 줄로 설명하는 것이
- * 목적입니다. 실제 매치를 보러 가는 건 라이브 탭입니다.
- *
- * 히어로 옆 육각형은 장식입니다 — 실제 보드가 아니라 도형이며, 진영 색이 무엇을
- * 뜻하는지 미리 눈에 익히는 역할만 합니다.
- */
-async function renderHome() {
-  view.innerHTML = `
-    <section class="hero-grid">
-      <div class="hero">
-        <div class="kicker">1V1 · 같은 시드 · 각자의 세계</div>
-        <h1>먼저 <span class="acc">연결</span>하는 쪽이<br />이깁니다</h1>
-        <p class="lede">
-          두 사람이 같은 시드의 서로 다른 세계에서 동시에 시작합니다.
-          5×5 헥스 보드의 각 칸에는 미션이 하나씩 걸려 있고, 먼저 달성한 쪽이 그 칸을 가져갑니다.
-          자기 진영의 마주보는 두 변을 잇는 길을 완성하면 승리합니다.
-        </p>
-        <div class="hero-cta">
-          <a class="btn" href="#/live">라이브 보기</a>
-          <a class="btn-ghost" href="#/download">모드 다운로드</a>
-        </div>
-        <div class="hero-stats" id="hero-stats">
-          <div><div class="stat-num">—</div><div class="stat-label">미션 풀</div></div>
-          <div><div class="stat-num">—</div><div class="stat-label">누적 매치</div></div>
-          <div><div class="stat-num">—</div><div class="stat-label">등록 플레이어</div></div>
-        </div>
-      </div>
-
-      <div class="hero-board">
-        <div class="hero-hexes">${heroHexes()}</div>
-      </div>
-    </section>
-
-    <section class="rules">
-      <div>
-        <div class="kicker">규칙</div>
-        <h2>운이 아니라 순서를 겨루는 경기</h2>
-      </div>
-      <div class="rules-list">
-        <div class="rule">
-          <div class="n">01</div>
-          <div class="body">
-            매치가 시작되면 두 사람 모두 <strong>같은 시드</strong>의 새 세계로 들어갑니다.
-            서로의 세계를 오갈 수는 없고, 오가는 것은 누가 어떤 칸을 가져갔는지뿐입니다.
-          </div>
-        </div>
-        <div class="rule">
-          <div class="n">02</div>
-          <div class="body">
-            보드의 25칸에는 난이도별 미션이 배정됩니다. 미션을 달성하면 그 칸이 즉시 내 색으로 바뀌고,
-            <strong>같은 칸을 상대가 다시 가져갈 수는 없습니다.</strong>
-          </div>
-        </div>
-        <div class="rule">
-          <div class="n">03</div>
-          <div class="body">
-            파랑은 위아래, 보라는 좌우. 자기 진영의 마주보는 두 변을 <strong>끊기지 않게 잇는 순간</strong> 경기가 끝납니다.
-            남은 칸이 몇 개든 상관없습니다.
-          </div>
-        </div>
-        <div class="rules-note">
-          어떤 미션을 어떤 순서로 집는지가 실력입니다. 쉬운 칸만 모아도 길이 이어지지 않으면 이기지 못하고,
-          상대의 길목을 먼저 끊는 선택이 종종 더 빠릅니다.
-        </div>
-      </div>
-    </section>
-  `;
-
-  // 통계는 실제 값만 씁니다. 못 가져오면 자리를 비워 두지, 그럴듯한 숫자를 지어내지 않습니다.
-  try {
-    const [missions, matches, board] = await Promise.all([
-      api("/api/missions").catch(() => null),
-      api("/api/matches?limit=1").catch(() => null),
-      api("/api/leaderboard?limit=200").catch(() => null),
-    ]);
-    const cells = view.querySelectorAll("#hero-stats .stat-num");
-    if (cells[0] && missions) cells[0].textContent = String(missions.missions?.length ?? "—");
-    if (cells[1] && matches) cells[1].textContent = String(matches.total ?? "—");
-    if (cells[2] && board) cells[2].textContent = String(board.players?.length ?? "—");
-  } catch { /* 통계는 있으면 좋은 것이지 필수가 아닙니다 */ }
+function pct(n, total) {
+  if (!total) return "0%";
+  return `${Math.round((n / total) * 100)}%`;
 }
 
-/** 히어로 장식용 육각 격자. 마름모꼴로 어긋나게 쌓아 실제 보드 모양을 흉내냅니다. */
-function heroHexes() {
-  // 진영 색이 들어갈 자리 — 파랑은 세로로, 보라는 가로로 이어지게 배치했습니다.
-  const a = new Set(["0,2", "1,2", "2,2", "3,2"]);
-  const b = new Set(["2,0", "2,1", "2,3"]);
-  let out = "";
-  for (let r = 0; r < 5; r++) {
-    let row = "";
-    for (let c = 0; c < 5; c++) {
-      const key = `${r},${c}`;
-      const cls = a.has(key) ? " a" : b.has(key) ? " b" : "";
-      row += `<div class="cell${cls}"><i></i></div>`;
-    }
-    // 각 행을 반 칸씩 밀어 육각 격자처럼 보이게 합니다.
-    out += `<div class="row" style="margin-left:calc((var(--w) + 3px) * ${(4 - r) / 2})">${row}</div>`;
-  }
-  return out;
-}
+/* ------------------------------------------------------- 헤더 / 푸터 / 셸 */
 
-// ---- view: LIVE (진행 중인 매치 + 방 코드) ----------------------------------
-
-async function renderLive() {
-  view.innerHTML = `
-    <section class="page">
-      <div class="section-header">
-        <div>
-          <div class="kicker">라이브</div>
-          <h1>진행 중인 매치</h1>
-        </div>
-        <div>
-          <div class="kicker">비공개 방</div>
-          <form id="spec-form" class="spec-form" style="margin-top:10px">
-            <input id="spec-code" maxlength="4" placeholder="CODE" autocomplete="off" />
-            <button type="submit" class="btn-ghost">관전</button>
-          </form>
-        </div>
-      </div>
-      <div id="rooms-list" class="rooms-list"><div class="loading">불러오는 중…</div></div>
-      <div style="margin-top:18px;display:flex;justify-content:flex-end">
-        <button id="refresh-rooms" class="ghost-btn">새로고침</button>
-      </div>
-    </section>
-  `;
-
-  view.querySelector("#spec-form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const code = view.querySelector("#spec-code").value.trim().toUpperCase();
-    if (code.length !== 4) return;
-    location.hash = `#/board/${code}`;
-  });
-
-  view.querySelector("#refresh-rooms").addEventListener("click", refreshRooms);
-  await refreshRooms();
-
-  async function refreshRooms() {
-    const target = view.querySelector("#rooms-list");
-    if (!target) return;
-    target.innerHTML = `<div class="loading">불러오는 중…</div>`;
-    try {
-      const { rooms } = await api("/api/rooms");
-      if (!rooms?.length) {
-        target.innerHTML = `<div class="empty">지금 열려 있는 방이 없습니다. 방 코드를 알고 있다면 위에 입력하세요.</div>`;
-        return;
-      }
-      target.innerHTML = rooms.map(roomCard).join("");
-    } catch (err) {
-      target.innerHTML = `<div class="error-pane">방 목록을 불러오지 못했습니다: ${escapeHtml(err.message)}</div>`;
-    }
-  }
-}
-
-function roomCard(room) {
-  // L2: every DB- or protocol-sourced field is escaped before going into HTML.
-  // Numeric / enum-constrained fields are still escaped via numEsc/sideClass
-  // helpers so an upstream type drift can't silently become XSS.
-  const ratedTag = room.settings?.rated ? `<span class="tag tag-rated">랭크</span>` : "";
-  const safeCode = escapeHtml(String(room.code ?? ""));
-  const players = (room.players ?? []).map((p) => {
-    const sideCls = p.side === "A" ? "side-a" : "side-b";
-    const elo = numEsc(p.elo);
-    return `
-      <div class="rcard-player ${sideCls}">
-        <img src="${avatarUrl(p.uuid, 32)}" alt="" class="avatar-32" loading="lazy" />
-        <div class="rcard-pname">
-          <span class="name">${escapeHtml(p.name ?? "")}</span>
-          <span class="sub">${escapeHtml(p.side ?? "")} · ELO ${elo}${p.isHost ? " · 방장" : ""}</span>
-        </div>
-      </div>
-    `;
-  }).join("");
-  const empty = (room.players?.length ?? 0) < room.capacity ?
-    `<div class="rcard-player empty-slot">빈 자리</div>` : "";
+function header() {
+  const L = t();
+  const on = (p) => (state.page === p ? " on" : "");
+  const live = state.rooms.length;
+  const label = state.lang === "ko"
+    ? (live ? `${live}판 중계 중` : "중계 중인 판 없음")
+    : (live ? `${live} LIVE NOW` : "NOTHING LIVE");
   return `
-    <a class="room-card" href="#/board/${encodeURIComponent(room.code ?? "")}">
-      <div class="rcard-head">
-        <span class="rcard-code">${safeCode}</span>
-        ${statusBadge(room.status)}
-        ${ratedTag}
-      </div>
-      <div class="rcard-players">
-        ${players}
-        ${empty}
-      </div>
-      <div class="rcard-spec">관전 →</div>
-    </a>
-  `;
-}
-
-/** Render a value that *should* be a number, but escape it as HTML defensively
- *  in case upstream sends a string with markup. Returns "—" for null/undefined. */
-function numEsc(v) {
-  if (v == null) return "—";
-  return escapeHtml(String(v));
-}
-
-// ---- view: LEADERBOARD ------------------------------------------------------
-
-async function renderLeaderboard() {
-  showLoading();
-  try {
-    const { players } = await api("/api/leaderboard?limit=100");
-    view.innerHTML = `
-      <section class="page page-leaderboard">
-        <div class="section-header">
-          <h1>리더보드</h1>
-          <span class="sub">상위 ${players.length}명</span>
-        </div>
-        ${players.length === 0
-          ? `<div class="empty">아직 기록된 플레이어가 없습니다.</div>`
-          : `<table class="data-table">
-              <thead>
-                <tr>
-                  <th class="rank">#</th>
-                  <th>플레이어</th>
-                  <th class="num">ELO</th>
-                  <th class="num">전적</th>
-                  <th class="num">승률</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${players.map((p, i) => `
-                  <tr>
-                    <td class="rank">${i + 1}</td>
-                    <td>
-                      <a class="player-link" href="#/players/${encodeURIComponent(p.uuid ?? "")}">
-                        <img src="${avatarUrl(p.uuid, 28)}" alt="" class="avatar-28" loading="lazy" />
-                        <span>${escapeHtml(p.name ?? "")}</span>
-                      </a>
-                    </td>
-                    <td class="num elo">${numEsc(p.elo)}</td>
-                    <td class="num">${numEsc(p.wins)}승 ${numEsc(p.losses)}패 ${numEsc(p.draws)}무</td>
-                    <td class="num">${escapeHtml(winrate(p.wins, p.losses, p.draws))}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>`}
-      </section>
-    `;
-  } catch (err) {
-    showError(err);
-  }
-}
-
-// ---- view: MATCHES LIST -----------------------------------------------------
-
-async function renderMatchesList() {
-  const params = new URLSearchParams((location.hash.split("?")[1] ?? ""));
-  const player = params.get("player") ?? "";
-  const offset = Math.max(0, Number(params.get("offset") ?? 0));
-  const LIMIT = 20;
-
-  view.innerHTML = `
-    <section class="page page-matches">
-      <div class="section-header">
-        <h1>경기 기록</h1>
-      </div>
-      <form id="matches-search" class="search-form">
-        <input id="match-q" placeholder="플레이어 이름으로 검색" value="${escapeHtml(player)}" />
-        <button type="submit">검색</button>
-        ${player ? `<a class="ghost-btn" href="#/matches">전체 보기</a>` : ""}
-      </form>
-      <div id="matches-body">불러오는 중…</div>
-    </section>
-  `;
-
-  view.querySelector("#matches-search").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const q = view.querySelector("#match-q").value.trim();
-    location.hash = q ? `#/matches?player=${encodeURIComponent(q)}` : "#/matches";
-  });
-
-  try {
-    const qs = new URLSearchParams();
-    qs.set("limit", String(LIMIT));
-    qs.set("offset", String(offset));
-    if (player) qs.set("player", player);
-    const { matches, total } = await api(`/api/matches?${qs.toString()}`);
-
-    const body = view.querySelector("#matches-body");
-    if (!matches.length) {
-      body.innerHTML = `<div class="empty">조건에 맞는 경기가 없습니다.</div>`;
-      return;
-    }
-    body.innerHTML = `
-      <ul class="match-list">
-        ${matches.map(matchListItem).join("")}
-      </ul>
-      ${paginationControls(offset, LIMIT, total, player)}
-    `;
-  } catch (err) {
-    view.querySelector("#matches-body").innerHTML =
-      `<div class="error-pane">경기 목록을 불러오지 못했습니다: ${escapeHtml(err.message)}</div>`;
-  }
-}
-
-function matchListItem(m) {
-  const winner = m.winner_side;
-  const aWon = winner === "A";
-  const bWon = winner === "B";
-  const ratedTag = m.rated ? `<span class="tag tag-rated">랭크</span>` : "";
-
-  const aEloDelta = (m.player_a_elo_before != null && m.player_a_elo_after != null)
-    ? (m.player_a_elo_after - m.player_a_elo_before) : null;
-  const bEloDelta = (m.player_b_elo_before != null && m.player_b_elo_after != null)
-    ? (m.player_b_elo_after - m.player_b_elo_before) : null;
-
-  // L2: winner is a TEXT column server-side with no DB-level constraint to "A"|"B".
-  // Defend by treating it as untrusted: derive the class from a strict allow-list,
-  // and escape the display text.
-  const winnerCls = winner === "A" ? "winner-a" : winner === "B" ? "winner-b" : "winner-draw";
-  const winnerLabel = winner === "A" ? "A 승리" : winner === "B" ? "B 승리" : "무승부";
-  const safeId = Number.isInteger(m.id) ? m.id : 0;
-  return `
-    <li class="match-row">
-      <a class="match-link" href="#/matches/${safeId}">
-        <div class="match-time">
-          ${escapeHtml(fmtDate(m.ended_at))}
-          ${ratedTag}
-        </div>
-        <div class="match-vs">
-          <div class="vs-player vs-a ${aWon ? "won" : ""}">
-            <img src="${avatarUrl(m.player_a_uuid, 28)}" alt="" class="avatar-28" />
-            <span class="vs-name">${escapeHtml(m.player_a_name ?? "—")}</span>
-            ${eloDeltaPill(aEloDelta, m.player_a_elo_after)}
-          </div>
-          <div class="vs-sep">vs</div>
-          <div class="vs-player vs-b ${bWon ? "won" : ""}">
-            <img src="${avatarUrl(m.player_b_uuid, 28)}" alt="" class="avatar-28" />
-            <span class="vs-name">${escapeHtml(m.player_b_name ?? "—")}</span>
-            ${eloDeltaPill(bEloDelta, m.player_b_elo_after)}
-          </div>
-        </div>
-        <div class="match-outcome">
-          <span class="winner-tag ${winnerCls}">${winnerLabel}</span>
-          <span class="reason">${escapeHtml(m.reason ?? "")}</span>
-        </div>
+    <div class="hdr">
+      <a class="hdr-brand" href="#/">
+        <span class="hdr-logo"></span>
+        <span class="hdr-word">HEX</span>
+        <span class="hdr-sub">MINECRAFT</span>
       </a>
-    </li>
-  `;
-}
-
-function eloDeltaPill(delta, after) {
-  if (delta == null) return `<span class="elo-pill">—</span>`;
-  const sign = delta > 0 ? "+" : "";
-  const cls = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
-  return `<span class="elo-pill ${cls}">${numEsc(after)} (${sign}${numEsc(delta)})</span>`;
-}
-
-function paginationControls(offset, limit, total, player) {
-  const hasPrev = offset > 0;
-  const hasNext = total == null ? false : offset + limit < total;
-  if (!hasPrev && !hasNext) return "";
-  const baseHash = player ? `#/matches?player=${encodeURIComponent(player)}&` : "#/matches?";
-  const prevHash = `${baseHash}offset=${Math.max(0, offset - limit)}`;
-  const nextHash = `${baseHash}offset=${offset + limit}`;
-  return `
-    <div class="pagination">
-      ${hasPrev ? `<a class="ghost-btn" href="${prevHash}">← 이전</a>` : `<span class="ghost-btn disabled">← 이전</span>`}
-      <span class="page-info">${total != null ? `${offset + 1}–${Math.min(offset + limit, total)} / ${total}` : ""}</span>
-      ${hasNext ? `<a class="ghost-btn" href="${nextHash}">다음 →</a>` : `<span class="ghost-btn disabled">다음 →</span>`}
+      <nav class="hdr-nav">
+        <a href="#/"${on("home") ? ' class="on"' : ""}>${L.nav1}</a>
+        <a href="#/live"${on("live") || on("spectate") ? ' class="on"' : ""}>${L.nav3}</a>
+        <a href="#/ranks"${on("ranks") ? ' class="on"' : ""}>${L.nav4}</a>
+        <a href="#/install"${on("install") ? ' class="on"' : ""}>${L.nav5}</a>
+      </nav>
+      <div class="hdr-right">
+        <div class="hdr-live${live ? " on" : ""}"><i></i><span>${label}</span></div>
+        <div class="lang">
+          <button data-lang="en" class="${state.lang === "en" ? "on" : ""}">EN</button>
+          <button data-lang="ko" class="${state.lang === "ko" ? "on" : ""}">한국어</button>
+        </div>
+        <a class="cta" href="#/install">${L.getMod}</a>
+      </div>
     </div>
   `;
 }
 
-// ---- view: MATCH DETAIL -----------------------------------------------------
-
-async function renderMatchDetail(id) {
-  showLoading();
-  try {
-    const [match, missions] = await Promise.all([
-      api(`/api/matches/${id}`),
-      loadMissions(),
-    ]);
-    const settings = match.settings_json ? JSON.parse(match.settings_json) : {};
-    const board = match.board_json ? JSON.parse(match.board_json) : [];
-    const claimed = match.claimed_json ? JSON.parse(match.claimed_json) : [];
-
-    const aWon = match.winner_side === "A";
-    const bWon = match.winner_side === "B";
-
-    const aDelta = (match.player_a_elo_before != null && match.player_a_elo_after != null)
-      ? (match.player_a_elo_after - match.player_a_elo_before) : null;
-    const bDelta = (match.player_b_elo_before != null && match.player_b_elo_after != null)
-      ? (match.player_b_elo_after - match.player_b_elo_before) : null;
-
-    let caClaimed = 0, cbClaimed = 0;
-    for (const c of claimed) (c.side === "A" ? caClaimed++ : cbClaimed++);
-
-    // L2: defensive derivation of winner side; no DB-level constraint exists.
-    const winnerCls = match.winner_side === "A" ? "winner-a"
-      : match.winner_side === "B" ? "winner-b"
-      : "winner-draw";
-    const winnerLabel = match.winner_side === "A" ? "A 승리"
-      : match.winner_side === "B" ? "B 승리"
-      : "무승부";
-
-    view.innerHTML = `
-      <section class="page page-match-detail">
-        <a class="back-link" href="#/matches">← 경기 기록</a>
-
-        <div class="match-head">
-          <div class="mh-meta">
-            <span class="match-id">#${numEsc(match.id)}</span>
-            ${match.rated ? `<span class="tag tag-rated">랭크</span>` : `<span class="tag">캐주얼</span>`}
-            <span class="sub">${escapeHtml(fmtDate(match.ended_at))}</span>
-            ${match.started_at ? `<span class="sub">· ${escapeHtml(fmtDuration(match.started_at, match.ended_at))}</span>` : ""}
-          </div>
-          <div class="mh-result">
-            <span class="winner-tag ${winnerCls}">${winnerLabel}</span>
-            <span class="reason">${escapeHtml(match.reason ?? "")}</span>
-          </div>
-        </div>
-
-        <div class="vs-card">
-          <div class="vs-side vs-a ${aWon ? "won" : ""}">
-            ${match.player_a_uuid
-              ? `<a class="player-link big" href="#/players/${encodeURIComponent(match.player_a_uuid)}">
-                  <img src="${bodyUrl(match.player_a_uuid, 96)}" alt="" class="body-96" loading="lazy" />
-                  <div>
-                    <div class="vs-name">${escapeHtml(match.player_a_name ?? "—")}</div>
-                    ${eloLine(match.player_a_elo_before, match.player_a_elo_after, aDelta)}
-                  </div>
-                </a>`
-              : `<div class="player-link big">
-                  <img src="${bodyUrl(null, 96)}" alt="" class="body-96" />
-                  <div><div class="vs-name">—</div></div>
-                </div>`}
-            <div class="claim-count">${numEsc(caClaimed)}칸</div>
-          </div>
-          <div class="vs-versus">vs</div>
-          <div class="vs-side vs-b ${bWon ? "won" : ""}">
-            ${match.player_b_uuid
-              ? `<a class="player-link big" href="#/players/${encodeURIComponent(match.player_b_uuid)}">
-                  <img src="${bodyUrl(match.player_b_uuid, 96)}" alt="" class="body-96" loading="lazy" />
-                  <div>
-                    <div class="vs-name">${escapeHtml(match.player_b_name ?? "—")}</div>
-                    ${eloLine(match.player_b_elo_before, match.player_b_elo_after, bDelta)}
-                  </div>
-                </a>`
-              : `<div class="player-link big">
-                  <img src="${bodyUrl(null, 96)}" alt="" class="body-96" />
-                  <div><div class="vs-name">—</div></div>
-                </div>`}
-            <div class="claim-count">${numEsc(cbClaimed)}칸</div>
-          </div>
-        </div>
-
-        <div class="match-body">
-          <div class="board-wrap board-static">
-            <svg id="match-board"></svg>
-            <div id="hex-tooltip" class="hex-tooltip"></div>
-          </div>
-          <aside class="match-side">
-            <h3>설정</h3>
-            <ul class="kv-list">
-              <li><span>레이팅 반영</span><span>${settings.rated ? "예" : "아니오"}</span></li>
-              <li><span>인벤토리 유지</span><span>${settings.inventorySave ? "예" : "아니오"}</span></li>
-              <li><span>포화 효과</span><span>${settings.saturation ? "예" : "아니오"}</span></li>
-              <li><span>야간 투시</span><span>${settings.nightVision ? "예" : "아니오"}</span></li>
-              <li><span>수중 호흡</span><span>${settings.waterBreathing ? "예" : "아니오"}</span></li>
-              ${match.seed ? `<li><span>시드</span><span class="mono">${escapeHtml(match.seed)}</span></li>` : ""}
-              ${match.room_code ? `<li><span>방 코드</span><span class="mono">${escapeHtml(match.room_code)}</span></li>` : ""}
-            </ul>
-            <h3>점유 목록</h3>
-            <ol class="claim-history">
-              ${claimed
-                .slice()
-                .sort((a, b) => a.claimedAt - b.claimedAt)
-                .map((c) => {
-                  const mname = missions.get(c.missionId)?.displayName ?? c.missionId;
-                  // L2: `c.side` is derived from claimed_json which is server-controlled,
-                  // but defending against future code paths writing arbitrary text:
-                  const sideCls = c.side === "A" ? "side-a" : c.side === "B" ? "side-b" : "";
-                  const sideLabel = c.side === "A" ? "A" : c.side === "B" ? "B" : "?";
-                  const timeStr = new Date(c.claimedAt).toLocaleTimeString("ko-KR", { hour12: false });
-                  return `<li class="${sideCls}">
-                    <span class="time">${escapeHtml(timeStr)}</span>
-                    <span class="side-tag">[${sideLabel}]</span>
-                    <span>${escapeHtml(mname)}</span>
-                  </li>`;
-                }).join("")}
-            </ol>
-          </aside>
-        </div>
-      </section>
-    `;
-
-    const tooltipEl = view.querySelector("#hex-tooltip");
-    const wrapEl = view.querySelector(".board-static");
-
-    renderBoardSvg(view.querySelector("#match-board"), {
-      board, claimed, missions,
-      onHover: (tileId, ev) => {
-        const tile = board.find((t) => t.tileId === tileId);
-        if (!tile) return;
-        const m = missions.get(tile.missionId);
-        const name = m?.displayName ?? tile.missionId;
-        const claim = claimed.find((c) => c.tileId === tileId);
-        // L2: claim.side is server-controlled but harden against future drift.
-        const claimSide = claim?.side === "A" || claim?.side === "B" ? claim.side : null;
-        const claimInfo = claimSide ? `<span class="claim-info">[${claimSide} 점유]</span>` : "";
-        // tile.difficulty is enum-bounded (easy/medium/hard) per Zod, but escape
-        // the class and contents anyway to make this future-proof.
-        const diffSafe = ["easy", "medium", "hard"].includes(tile.difficulty) ? tile.difficulty : "easy";
-        tooltipEl.innerHTML =
-          `<span class="difficulty ${diffSafe}">${escapeHtml(diffSafe.toUpperCase())}</span>` +
-          `${escapeHtml(name)}${claimInfo}`;
-        const rect = wrapEl.getBoundingClientRect();
-        tooltipEl.style.left = `${ev.clientX - rect.left + 12}px`;
-        tooltipEl.style.top = `${ev.clientY - rect.top + 12}px`;
-        tooltipEl.classList.add("visible");
-      },
-      onLeave: () => tooltipEl.classList.remove("visible"),
-    });
-  } catch (err) {
-    showError(err);
-  }
-}
-
-function eloLine(before, after, delta) {
-  if (after == null) return `<div class="sub">ELO 비반영</div>`;
-  if (delta == null) return `<div class="sub">ELO ${numEsc(after)}</div>`;
-  const cls = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
-  const sign = delta > 0 ? "+" : "";
-  return `<div class="sub">ELO ${numEsc(before)} → <strong>${numEsc(after)}</strong>
-            <span class="elo-delta ${cls}">${sign}${numEsc(delta)}</span></div>`;
-}
-
-// ---- view: PLAYER SEARCH ----------------------------------------------------
-
-async function renderPlayerSearch() {
-  const params = new URLSearchParams((location.hash.split("?")[1] ?? ""));
-  const q = params.get("q") ?? "";
-
-  view.innerHTML = `
-    <section class="page page-players">
-      <div class="section-header">
-        <h1>유저 검색</h1>
-      </div>
-      <form id="player-search" class="search-form">
-        <input id="player-q" placeholder="플레이어 이름" value="${escapeHtml(q)}" autofocus />
-        <button type="submit">검색</button>
-      </form>
-      <div id="players-body">${q ? "불러오는 중…" : `<div class="empty">이름을 입력하세요.</div>`}</div>
-    </section>
+function footer() {
+  const L = t();
+  return `
+    <div class="ftr">
+      <span class="mark"></span>
+      <span class="txt">${L.footer}</span>
+      <span class="links">
+        <a href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">${L.source}</a>
+        <a href="/api/missions" target="_blank" rel="noopener">API</a>
+      </span>
+    </div>
   `;
-
-  view.querySelector("#player-search").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const next = view.querySelector("#player-q").value.trim();
-    location.hash = next ? `#/players?q=${encodeURIComponent(next)}` : "#/players";
-  });
-
-  if (!q) return;
-  try {
-    const { players } = await api(`/api/players/search?q=${encodeURIComponent(q)}&limit=50`);
-    const body = view.querySelector("#players-body");
-    if (!players.length) {
-      body.innerHTML = `<div class="empty">검색 결과가 없습니다.</div>`;
-      return;
-    }
-    body.innerHTML = `
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>플레이어</th>
-            <th class="num">ELO</th>
-            <th class="num">전적</th>
-            <th class="num">승률</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${players.map((p) => `
-            <tr>
-              <td>
-                <a class="player-link" href="#/players/${encodeURIComponent(p.uuid ?? "")}">
-                  <img src="${avatarUrl(p.uuid, 28)}" alt="" class="avatar-28" loading="lazy" />
-                  <span>${escapeHtml(p.name ?? "")}</span>
-                </a>
-              </td>
-              <td class="num elo">${numEsc(p.elo)}</td>
-              <td class="num">${numEsc(p.wins)}승 ${numEsc(p.losses)}패 ${numEsc(p.draws)}무</td>
-              <td class="num">${escapeHtml(winrate(p.wins, p.losses, p.draws))}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } catch (err) {
-    view.querySelector("#players-body").innerHTML =
-      `<div class="error-pane">검색 실패: ${escapeHtml(err.message)}</div>`;
-  }
 }
 
-// ---- view: PLAYER DETAIL ----------------------------------------------------
-
-async function renderPlayerDetail(uuid) {
-  showLoading();
-  try {
-    const [player, matchesRes] = await Promise.all([
-      api(`/api/players/${encodeURIComponent(uuid)}`),
-      api(`/api/matches?uuid=${encodeURIComponent(uuid)}&limit=20`),
-    ]);
-    const matches = matchesRes.matches ?? [];
-
-    // Recent ELO trajectory: pull this player's `elo_after` from each recent match
-    // (oldest first) — gives a quick mini-chart of the last 20 results.
-    const trajectory = matches
-      .slice()
-      .sort((a, b) => a.ended_at - b.ended_at)
-      .map((m) => {
-        const isA = m.player_a_uuid === player.uuid;
-        const eloAfter = isA ? m.player_a_elo_after : m.player_b_elo_after;
-        const eloBefore = isA ? m.player_a_elo_before : m.player_b_elo_before;
-        return { eloAfter, eloBefore, ts: m.ended_at };
-      })
-      .filter((p) => p.eloAfter != null);
-
-    view.innerHTML = `
-      <section class="page page-player">
-        <a class="back-link" href="#/players">← 유저 검색</a>
-
-        <div class="player-head">
-          <img src="${bodyUrl(player.uuid, 160)}" alt="" class="body-160" loading="lazy" />
-          <div class="ph-info">
-            <h1>${escapeHtml(player.name ?? "")}</h1>
-            <div class="ph-uuid mono">${escapeHtml(player.uuid ?? "")}</div>
-            <div class="ph-stats">
-              <div class="stat">
-                <div class="stat-num">${numEsc(player.elo)}</div>
-                <div class="stat-label">현재 ELO</div>
-              </div>
-              <div class="stat">
-                <div class="stat-num">${numEsc(player.games_played)}</div>
-                <div class="stat-label">경기 수</div>
-              </div>
-              <div class="stat">
-                <div class="stat-num">${numEsc(player.wins)}–${numEsc(player.losses)}–${numEsc(player.draws)}</div>
-                <div class="stat-label">승–패–무</div>
-              </div>
-              <div class="stat">
-                <div class="stat-num">${escapeHtml(winrate(player.wins, player.losses, player.draws))}</div>
-                <div class="stat-label">승률</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${trajectory.length > 1 ? `
-          <div class="elo-chart-wrap">
-            <h3>최근 ELO 추이</h3>
-            ${renderEloSparkline(trajectory)}
-          </div>` : ""}
-
-        <div class="section-header">
-          <h2>최근 경기</h2>
-        </div>
-        ${matches.length === 0
-          ? `<div class="empty">아직 경기 기록이 없습니다.</div>`
-          : `<ul class="match-list">${matches.map(matchListItem).join("")}</ul>`}
-      </section>
-    `;
-  } catch (err) {
-    if (err.message.includes("404")) {
-      view.innerHTML = `<div class="error-pane">플레이어를 찾을 수 없습니다.</div>`;
-      return;
-    }
-    showError(err);
-  }
+function render(body) {
+  app.innerHTML = header() + body + footer();
+  app.querySelectorAll(".lang button").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.lang = b.dataset.lang;
+      localStorage.setItem("mchx.lang", state.lang);
+      route();
+    }),
+  );
 }
 
-function renderEloSparkline(points) {
-  if (points.length < 2) return "";
-  const W = 600;
-  const H = 100;
-  const PAD = 16;
-  const elos = points.map((p) => p.eloAfter);
-  const minE = Math.min(...elos);
-  const maxE = Math.max(...elos);
-  const span = Math.max(1, maxE - minE);
-  const dx = (W - PAD * 2) / (points.length - 1);
+/* -------------------------------------------------------------- 화면: 소개 */
 
-  const path = points.map((p, i) => {
-    const x = PAD + i * dx;
-    const y = H - PAD - ((p.eloAfter - minE) / span) * (H - PAD * 2);
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+function heroHexes() {
+  // 장식용 격자. 파랑이 세로로, 보라가 가로로 이어지는 모습을 미리 보여줍니다.
+  const own = { 6: "a", 12: "a", 13: "a", 7: "b", 2: "b", 18: "b", 19: "b" };
+  let rows = "";
+  for (let r = 0; r < 5; r++) {
+    let cells = "";
+    for (let c = 0; c < 5; c++) {
+      const o = own[r * 5 + c];
+      const ring = o === "a" ? "#4A7BFA" : o === "b" ? "#C77CFA" : "#1E232B";
+      const bg = o === "a" ? "#16224a" : o === "b" ? "#2a1c45" : "#0E1116";
+      cells += `<div class="hcell" style="background:${ring}"><i style="background:${bg}"></i></div>`;
+    }
+    rows += `<div class="hrow" style="margin-left:calc((var(--w) + 3px) * ${(4 - r) / 2})">${cells}</div>`;
+  }
+  return `<div class="hexgrid">${rows}</div>`;
+}
 
-  const circles = points.map((p, i) => {
-    const x = PAD + i * dx;
-    const y = H - PAD - ((p.eloAfter - minE) / span) * (H - PAD * 2);
-    const dy = i === 0 ? 0 : p.eloAfter - points[i - 1].eloAfter;
-    const cls = dy > 0 ? "up" : dy < 0 ? "down" : "flat";
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="dot ${cls}">
-      <title>${p.eloAfter} (${new Date(p.ts).toLocaleDateString("ko-KR")})</title>
-    </circle>`;
-  }).join("");
+function pageHome() {
+  const L = t();
+  const s = state.stats;
+  return `
+    <div class="hero">
+      <div>
+        <div class="hero-eyebrow">${L.eyebrow}</div>
+        <h1>${L.h1a}<br /><span>${L.h1b}</span></h1>
+        <p>${L.heroP}</p>
+        <div class="hero-btns">
+          <a class="cta cta-lg" href="#/live">${L.ctaWatch}</a>
+          <a class="cta-ghost" href="#/install">${L.ctaDl}</a>
+        </div>
+        <div class="hero-stats">
+          <div><b>${s.pool}</b><span>${L.statPool}</span></div>
+          <div><b>${s.matches}</b><span>${L.statPlayed}</span></div>
+          <div><b>${s.players}</b><span>${L.statPlayers}</span></div>
+        </div>
+      </div>
+      <div class="hero-art">${heroHexes()}</div>
+    </div>
+
+    <div class="rules">
+      <div>
+        <div class="kick">${L.rulesKicker}</div>
+        <h2>${L.rulesH}</h2>
+      </div>
+      <div class="rules-body">
+        <div class="rule"><i>01</i><p>${L.r1}</p></div>
+        <div class="rule"><i>02</i><p>${L.r2}</p></div>
+        <div class="rule"><i>03</i><p>${L.r3}</p></div>
+        <div class="rules-note">${L.rulesNote}</div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadStats() {
+  const [m, mm, lb] = await Promise.all([
+    api("/api/missions").catch(() => null),
+    api("/api/matches?limit=1").catch(() => null),
+    api("/api/leaderboard?limit=200").catch(() => null),
+  ]);
+  state.stats = {
+    pool: m ? String(m.missions.length) : "—",
+    matches: mm && mm.total != null ? String(mm.total) : "—",
+    players: lb ? String(lb.players.length) : "—",
+  };
+}
+
+/* -------------------------------------------------------------- 화면: 중계 */
+
+function matchRow(room) {
+  const L = t();
+  const a = (room.players ?? []).find((p) => p.side === "A");
+  const b = (room.players ?? []).find((p) => p.side === "B");
+  const playing = room.status === "playing";
+  const size = room.boardSize || 25;
+  const tag = !playing ? L.tagWaiting : room.settings?.rated ? L.tagRanked : L.tagCasual;
+  const tagCls = !playing ? "private" : room.settings?.rated ? "ranked" : "private";
+
+  const side = (p, cls) => p
+    ? `<div class="row-p"><span class="dot ${cls}"></span><span class="nm">${escapeHtml(p.name ?? "")}</span><span class="el">${p.elo ?? "—"}</span></div>`
+    : `<div class="row-p"><span class="dot ${cls}" style="opacity:.35"></span><span class="el">${L.waiting}</span></div>`;
 
   return `
-    <svg class="elo-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-      <path d="${path}" class="spark-line" />
-      ${circles}
-      <text x="${PAD}" y="14" class="spark-label">${maxE}</text>
-      <text x="${PAD}" y="${H - 2}" class="spark-label">${minE}</text>
-    </svg>
+    <a class="row" href="#/board/${encodeURIComponent(room.code)}">
+      <div class="row-tag ${tagCls}">${tag}</div>
+      <div class="row-players">
+        ${side(a, "a")}
+        <span class="row-vs">vs</span>
+        ${side(b, "b")}
+      </div>
+      <div class="row-prog">
+        <div class="row-bar">
+          <div class="a" style="width:${pct(room.claimedA ?? 0, size)}"></div>
+          <div class="b" style="width:${pct(room.claimedB ?? 0, size)}"></div>
+        </div>
+        <div class="row-tiles">${room.claimedA ?? 0}–${room.claimedB ?? 0} · ${size}${state.lang === "ko" ? "칸" : " tiles"}</div>
+      </div>
+      <div class="row-clock">${playing ? clock(room.startedAt) : "--:--"}</div>
+      <div class="row-watch">${L.watch}</div>
+    </a>
   `;
 }
 
-// ---- view: DOWNLOAD ---------------------------------------------------------
+function pageLive() {
+  const L = t();
+  const rooms = state.rooms;
+  return `
+    <div class="wrap">
+      <div class="live-top">
+        <div>
+          <div class="kick live-kick"><span>${L.kLive}</span><span class="bar"></span><span class="upd">${L.updated}</span></div>
+          <h2 class="h-lg">${L.liveH}</h2>
+        </div>
+        <div style="flex:0 1 auto;min-width:0">
+          <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.kPrivate}</div>
+          <form class="code-row" id="codeForm">
+            <input class="code-in${state.codeError ? " bad" : ""}" id="codeIn" maxlength="4"
+                   placeholder="${L.codePh}" autocomplete="off" value="${escapeHtml(state.codeInput)}" />
+            <button class="code-btn" type="submit">${L.codeBtn}</button>
+          </form>
+          <div class="code-note${state.codeError ? " bad" : ""}">${state.codeError ? L.codeErr : L.codeNote}</div>
+        </div>
+      </div>
+      ${rooms.length
+        ? `<div class="rows">${rooms.map(matchRow).join("")}</div>`
+        : `<div class="rows"><div class="row" style="cursor:default"><div class="state" style="width:100%">${L.noLive}</div></div></div>`}
+    </div>
+  `;
+}
 
-/**
- * 설치 안내.
- *
- * 아직 공개 배포본이 없어서 다운로드 버튼 대신 그 사실을 적어 둡니다. 없는 링크를
- * 걸어 두면 클릭한 사람이 404 를 보고 프로젝트 전체를 의심하게 됩니다.
- */
-function renderDownload() {
-  view.innerHTML = `
-    <section class="page">
-      <div class="kicker">설치</div>
-      <h1 style="margin-top:12px;font-size:clamp(30px,3.4vw,44px)">모드 설치하기</h1>
-      <p class="lede" style="max-width:560px">
-        서버는 마인크래프트 상태를 전혀 보지 않습니다. 미션 달성은 각자의 클라이언트가 판단하고,
-        오가는 것은 시드와 점령 정보뿐입니다.
-      </p>
+function wireLive() {
+  const form = document.getElementById("codeForm");
+  if (!form) return;
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const code = (document.getElementById("codeIn").value || "").trim().toUpperCase();
+    if (code.length !== 4) return;
+    state.codeInput = code;
+    // 없는 코드로 보내면 관전 화면이 빈 채로 남으므로 미리 확인합니다.
+    const exists = state.rooms.some((r) => r.code === code);
+    if (!exists) {
+      try {
+        const { rooms } = await api("/api/rooms");
+        state.rooms = rooms ?? [];
+      } catch { /* 무시 */ }
+    }
+    if (state.rooms.some((r) => r.code === code)) {
+      state.codeError = false;
+      location.hash = `#/board/${code}`;
+    } else {
+      state.codeError = true;
+      route();
+    }
+  });
+}
+
+/* -------------------------------------------------------------- 화면: 랭킹 */
+
+function pageRanks() {
+  const L = t();
+  const rows = state.ranks;
+  if (!rows.length) {
+    return `<div class="wrap wrap-narrow"><div class="kick">${L.kSeason}</div><h2 class="h-lg" style="margin-top:12px">${L.ranksH}</h2><div class="state">${L.noRanks}</div></div>`;
+  }
+  return `
+    <div class="wrap wrap-narrow">
+      <div class="kick">${L.kSeason}</div>
+      <h2 class="h-lg" style="margin-top:12px">${L.ranksH}</h2>
+      <div class="rank-head">
+        <div>${L.thRank}</div><div>${L.thPlayer}</div>
+        <div class="r">ELO</div><div class="r">${L.thWl}</div><div class="r c-pct">${L.thPct}</div>
+      </div>
+      ${rows.map((p, i) => {
+        const total = (p.wins ?? 0) + (p.losses ?? 0) + (p.draws ?? 0);
+        const wp = total ? `${Math.round(((p.wins ?? 0) / total) * 100)}%` : "—";
+        const top = i < 3 ? ` top${i + 1}` : "";
+        return `
+          <div class="rank-row${top}">
+            <div class="rank-n">${String(i + 1).padStart(2, "0")}</div>
+            <div class="rank-p"><span class="dot"></span><span>${escapeHtml(p.name ?? "")}</span></div>
+            <div class="rank-elo">${p.elo ?? "—"}</div>
+            <div class="rank-num">${p.wins ?? 0} / ${p.losses ?? 0}</div>
+            <div class="rank-num c-pct">${wp}</div>
+          </div>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+/* -------------------------------------------------------------- 화면: 설치 */
+
+function pageInstall() {
+  const L = t();
+  const steps = OS_STEPS[state.lang][state.os];
+  const tab = (id, label) => `<button data-os="${id}" class="${state.os === id ? "on" : ""}">${label}</button>`;
+  return `
+    <div class="wrap wrap-narrow">
+      <div class="kick">${L.kInstall}</div>
+      <h2 class="h-lg" style="margin-top:12px">${L.dlH}</h2>
+      <p class="dl-hero">${L.dlP}</p>
 
       <div class="dl-card">
         <div class="rel">
-          <div class="rel-name">mchx 0.1.1</div>
-          <div class="rel-meta">아직 공개 배포 전입니다 — 준비되면 이 자리에 다운로드가 올라옵니다.</div>
+          <b>mchx 0.1.1</b>
+          <div class="meta">${L.relLine}</div>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px">
-          <a class="btn-ghost" href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">저장소 보기</a>
+        <div class="dl-btns">
+          <a class="cta cta-lg" href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">${L.dlJar}</a>
+          <a class="cta-ghost" href="https://github.com/pjw070823/mchx/commits/master" target="_blank" rel="noopener">${L.changelog}</a>
         </div>
       </div>
+
+      <div class="os-tabs">${tab("win", "WINDOWS")}${tab("mac", "MACOS")}${tab("linux", "LINUX")}</div>
 
       <div class="steps">
-        <div class="kicker">설치 순서</div>
-        <div class="step">
-          <div class="n">01</div>
-          <div>
-            <div class="title">Fabric 로더가 설치된 마인크래프트 26.1.2 준비</div>
-            <div class="body">Prism Launcher, Modrinth App 등 어떤 런처든 상관없습니다. 별도 인스턴스를 하나 만들어 두는 편이 편합니다.</div>
-          </div>
-        </div>
-        <div class="step">
-          <div class="n">02</div>
-          <div>
-            <div class="title">의존 모드 두 개를 mods 폴더에 넣기</div>
-            <div class="body">Fabric API 와 Fabric Language Kotlin 이 필요합니다. 둘 중 하나라도 없으면 게임이 모드를 건너뜁니다.</div>
-          </div>
-        </div>
-        <div class="step">
-          <div class="n">03</div>
-          <div>
-            <div class="title">mchx jar 을 같은 폴더에 넣고 실행</div>
-            <div class="body">타이틀 화면에 <strong>MCHX 로비</strong> 버튼이 생기면 정상입니다.</div>
-          </div>
-        </div>
-        <div class="step">
-          <div class="n">04</div>
-          <div>
-            <div class="title">필요하면 접속할 서버 바꾸기</div>
-            <div class="body">
-              기본값은 공식 서버입니다. 직접 띄운 서버를 쓰려면 <code class="mono">config/mchx.json</code> 을 고치세요.
-              메모장으로 저장하면 BOM 이 붙지만 모드가 알아서 걷어냅니다.
-            </div>
-            <code>{"serverUrl":"ws://내서버주소:8787/ws"}</code>
-          </div>
+        <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.stepsTitle}</div>
+        <div class="steps-list">
+          ${steps.map((s) => `
+            <div class="step">
+              <div class="n">${s.n}</div>
+              <div class="bd">
+                <div class="ti">${escapeHtml(s.title)}</div>
+                <div class="tx">${escapeHtml(s.body)}</div>
+                ${s.cmd ? `<div class="cmd">${escapeHtml(s.cmd)}</div>` : ""}
+              </div>
+            </div>`).join("")}
         </div>
       </div>
 
-      <div class="req-grid">
+      <div class="req">
         <div>
-          <div class="kicker">필요한 것</div>
-          <div class="body">
-            Minecraft 26.1.2<br />
-            Fabric Loader 0.19+<br />
-            Fabric API<br />
-            Fabric Language Kotlin 1.13+
-          </div>
+          <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.requires}</div>
+          <div class="bd">Minecraft 26.1.2<br />Fabric Loader 0.19+<br />Fabric API<br />Fabric Language Kotlin 1.13+</div>
         </div>
         <div>
-          <div class="kicker">필요 없는 것</div>
-          <div class="body">
-            서버 접속 설정 — 각자 싱글플레이로 진행합니다<br />
-            포트 개방 — 클라이언트가 먼저 연결합니다<br />
-            별도 계정 — 마인크래프트 계정으로 인증합니다
-          </div>
+          <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.notRequired}</div>
+          <div class="bd">${L.nr1}<br />${L.nr2}<br />${L.nr3}</div>
         </div>
       </div>
-    </section>
+    </div>
   `;
 }
 
-// ---- view: BOARD (live spectator) ------------------------------------------
-
-let spectatorCleanup = null;
-
-function renderBoard(code) {
-  if (spectatorCleanup) {
-    try { spectatorCleanup(); } catch {}
-    spectatorCleanup = null;
-  }
-  view.innerHTML = "";
-  spectatorCleanup = mountSpectator(view, code);
+function wireInstall() {
+  document.querySelectorAll(".os-tabs button").forEach((b) =>
+    b.addEventListener("click", () => { state.os = b.dataset.os; route(); }),
+  );
 }
 
-// ---- router -----------------------------------------------------------------
+/* ------------------------------------------------------------------ 라우터 */
 
-function dispatch() {
-  // Tear down live spectator unless we're staying on the board route.
+let cleanup = null;
+
+async function route() {
+  if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
+
   const hash = location.hash || "#/";
-  const route = hash.split("?")[0];
-  if (!route.startsWith("#/board/") && spectatorCleanup) {
-    try { spectatorCleanup(); } catch {}
-    spectatorCleanup = null;
+  const board = hash.match(/^#\/board\/([A-Za-z0-9]{4})$/);
+
+  if (board) {
+    state.page = "spectate";
+    render(`<div class="wrap wrap-wide" id="spec"></div>`);
+    cleanup = mountSpectator(document.getElementById("spec"), board[1].toUpperCase(), t(), state.lang);
+    return;
   }
 
-  setActiveTab(route);
-
-  const matchersDetail = route.match(/^#\/matches\/(\d+)$/);
-  const playerDetail = route.match(/^#\/players\/([^/]+)$/);
-  const boardRoute = route.match(/^#\/board\/([A-Za-z0-9]{4})$/);
-
-  if (route === "" || route === "#" || route === "#/") {
-    renderHome();
-  } else if (route === "#/live") {
-    renderLive();
-  } else if (route === "#/download") {
-    renderDownload();
-  } else if (route === "#/leaderboard") {
-    renderLeaderboard();
-  } else if (matchersDetail) {
-    renderMatchDetail(Number(matchersDetail[1]));
-  } else if (route === "#/matches") {
-    renderMatchesList();
-  } else if (route === "#/players") {
-    renderPlayerSearch();
-  } else if (playerDetail) {
-    renderPlayerDetail(decodeURIComponent(playerDetail[1]));
-  } else if (boardRoute) {
-    renderBoard(boardRoute[1].toUpperCase());
-  } else {
-    view.innerHTML = `<div class="error-pane">알 수 없는 경로: ${escapeHtml(route)}</div>`;
+  if (hash === "#/live") {
+    state.page = "live";
+    render(pageLive());
+    try {
+      const { rooms } = await api("/api/rooms");
+      state.rooms = rooms ?? [];
+    } catch { state.rooms = []; }
+    render(pageLive());
+    wireLive();
+    return;
   }
+
+  if (hash === "#/ranks") {
+    state.page = "ranks";
+    render(pageRanks());
+    try {
+      const { players } = await api("/api/leaderboard?limit=100");
+      state.ranks = players ?? [];
+    } catch { state.ranks = []; }
+    render(pageRanks());
+    return;
+  }
+
+  if (hash === "#/install") {
+    state.page = "install";
+    render(pageInstall());
+    wireInstall();
+    return;
+  }
+
+  state.page = "home";
+  render(pageHome());
+  await loadStats();
+  render(pageHome());
 }
 
-function setActiveTab(route) {
-  const map = {
-    home: route === "#/" || route === "" || route === "#",
-    // 관전 화면은 라이브에서 들어가므로 그 탭을 계속 켜 둡니다.
-    live: route === "#/live" || route.startsWith("#/board/"),
-    leaderboard: route === "#/leaderboard",
-    matches: route.startsWith("#/matches"),
-    players: route.startsWith("#/players"),
-    download: route === "#/download",
-  };
-  document.querySelectorAll("#nav a").forEach((a) => {
-    const r = a.dataset.route;
-    a.classList.toggle("active", !!map[r]);
-  });
-}
-
-/**
- * 헤더의 라이브 표시등. 실제 활성 방 수를 보여줍니다 — 켜져 있는데 아무 일도
- * 없는 표시등은 신뢰를 깎아먹기만 하므로, 방이 없으면 점도 꺼 둡니다.
- */
-async function refreshLivePill() {
-  const pill = document.getElementById("live-pill");
-  const label = document.getElementById("live-label");
-  if (!pill || !label) return;
+/** 헤더의 중계 표시등만 주기적으로 갱신합니다. */
+async function pollRooms() {
   try {
     const { rooms } = await api("/api/rooms");
-    const n = rooms?.length ?? 0;
-    const playing = (rooms ?? []).filter((r) => r.status === "playing").length;
-    pill.classList.toggle("on", n > 0);
-    label.textContent = n === 0 ? "대기 중인 매치 없음" : `${n}개 방 · ${playing}개 진행 중`;
-  } catch {
-    pill.classList.remove("on");
-    label.textContent = "연결 안 됨";
-  }
+    const changed = (rooms ?? []).length !== state.rooms.length;
+    state.rooms = rooms ?? [];
+    const pill = document.querySelector(".hdr-live");
+    if (pill) {
+      pill.classList.toggle("on", state.rooms.length > 0);
+      const n = state.rooms.length;
+      pill.querySelector("span").textContent = state.lang === "ko"
+        ? (n ? `${n}판 중계 중` : "중계 중인 판 없음")
+        : (n ? `${n} LIVE NOW` : "NOTHING LIVE");
+    }
+    if (changed && state.page === "live") { render(pageLive()); wireLive(); }
+  } catch { /* 표시등은 있으면 좋은 것 */ }
 }
 
-window.addEventListener("hashchange", dispatch);
-window.addEventListener("DOMContentLoaded", () => {
-  if (!location.hash || location.hash === "#") location.hash = "#/";
-  dispatch();
-  refreshLivePill();
-  setInterval(refreshLivePill, 20_000);
-});
-
-// If DOMContentLoaded already fired (module loaded after), kick off now.
-if (document.readyState !== "loading") {
-  if (!location.hash || location.hash === "#") location.hash = "#/";
-  dispatch();
-  refreshLivePill();
-  setInterval(refreshLivePill, 20_000);
-}
+window.addEventListener("hashchange", route);
+route();
+pollRooms();
+setInterval(pollRooms, 15_000);

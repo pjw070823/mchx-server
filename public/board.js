@@ -1,15 +1,7 @@
-// Minecraft Hex — board rendering + spectator client.
+// Minecraft Hex — 보드 렌더링 + 관전 클라이언트.
 //
-// Two public entrypoints:
-//   - mountSpectator(container, roomCode): live WS spectator (existing UI)
-//   - renderStaticBoard(svgEl, { board, claimed, missions, onHover, onLeave }):
-//       static replay rendering for the match-detail page.
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-const HEX_R = 32;
-const HEX_W = HEX_R * 2;
-const HEX_H = HEX_R * Math.sqrt(3);
-const COL_DX = HEX_R * 1.5;
+// 화면 구성과 보드는 목업을 그대로 옮겼습니다. 육각형은 clip-path 를 쓴 div 이고,
+// 마름모 바깥 변만 절대 배치한 SVG 로 겹쳐 그립니다.
 
 /** 모드가 붙는 API+WebSocket 포트. 관전 보드(:80)와는 다른 포트입니다. */
 const API_PORT = 8787;
@@ -18,10 +10,8 @@ const API_PORT = 8787;
  * 관전 소켓 주소.
  *
  * 같은 Node 프로세스가 두 포트로 서비스합니다 — API+WS 는 [API_PORT], 관전 보드는 :80.
- * 그래서 페이지가 :80 에서 왔으면 소켓은 다른 포트로 붙어야 하고, 그 외의 포트에서
- * 왔으면 그 포트가 곧 API 포트입니다(개발 중 임의 포트로 띄우는 경우).
- *
- * 이 구분이 없으면 8787 이 아닌 포트로 띄운 개발 서버에서는 보드가 영영 비어 있습니다.
+ * 페이지가 :80 에서 왔으면 소켓은 다른 포트로 붙어야 하고, 그 외 포트에서 왔으면
+ * 그 포트가 곧 API 포트입니다(개발 중 임의 포트로 띄우는 경우).
  */
 function defaultWsUrl() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -38,408 +28,311 @@ async function loadMissions() {
   return map;
 }
 
-function vAbs(q, r, vIdx) {
-  const p = pixelFor(q, r);
-  const angle = (Math.PI / 3) * vIdx;
-  return { x: p.x + HEX_R * Math.cos(angle), y: p.y + HEX_R * Math.sin(angle) };
-}
+/* ------------------------------------------------------------ 보드 그리기 */
 
-function pixelFor(q, r) {
-  const d = q + r;
-  const qMin = Math.max(0, d - 4);
-  const qMax = Math.min(d, 4);
-  const num = qMax - qMin + 1;
-  const colIndex = q - qMin;
-  const x = (d - 4) * COL_DX;
-  const y = (colIndex - (num - 1) / 2) * HEX_H;
-  return { x, y };
-}
-
-function hexPath() {
-  const pts = [];
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 3) * i;
-    const x = HEX_R * Math.cos(angle);
-    const y = HEX_R * Math.sin(angle);
-    pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
-  }
-  return pts.join(" ");
-}
-
-function buildBoundaryChains() {
-  const c1 = [vAbs(0, 0, 3)];
-  for (let q = 0; q <= 4; q++) {
-    c1.push(vAbs(q, 0, 2));
-    c1.push(vAbs(q, 0, 1));
-  }
-  const c2 = [vAbs(4, 0, 1), vAbs(4, 0, 0)];
-  for (let r = 1; r <= 4; r++) {
-    c2.push(vAbs(4, r, 1));
-    c2.push(vAbs(4, r, 0));
-  }
-  const c3 = [vAbs(4, 4, 0)];
-  for (let q = 4; q >= 0; q--) {
-    c3.push(vAbs(q, 4, 5));
-    c3.push(vAbs(q, 4, 4));
-  }
-  const c4 = [vAbs(0, 4, 4), vAbs(0, 4, 3)];
-  for (let r = 3; r >= 0; r--) {
-    c4.push(vAbs(0, r, 4));
-    c4.push(vAbs(0, r, 3));
-  }
-  return [
-    { points: c1, side: "a" },
-    { points: c2, side: "b" },
-    { points: c3, side: "a" },
-    { points: c4, side: "b" },
-  ];
-}
-
-function drawBoundary(svg) {
-  for (const chain of buildBoundaryChains()) {
-    const pts = chain.points
-      .map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`)
-      .join(" ");
-    const polyline = document.createElementNS(SVG_NS, "polyline");
-    polyline.setAttribute("points", pts);
-    polyline.setAttribute("class", `boundary side-${chain.side}`);
-    svg.appendChild(polyline);
-  }
-}
-
-function labelLines(name) {
-  const MAX_LINE = 7;
-  if (!name) return ["", ""];
-  if (name.length <= MAX_LINE) return [name, ""];
-
-  const mid = Math.ceil(name.length / 2);
-  const breakChars = new Set([" ", "·", ",", "/"]);
-  let bestSplit = -1;
-  let bestDist = Infinity;
-  for (let i = 1; i < name.length - 1; i++) {
-    if (breakChars.has(name[i])) {
-      const dist = Math.abs(i - mid);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestSplit = i;
-      }
-    }
-  }
-
-  let l1, l2;
-  if (bestSplit > 0) {
-    l1 = name.slice(0, bestSplit).trim();
-    l2 = name.slice(bestSplit + 1).trim();
-  } else {
-    l1 = name.slice(0, mid);
-    l2 = name.slice(mid);
-  }
-  if (l1.length > MAX_LINE) l1 = l1.slice(0, MAX_LINE - 1) + "…";
-  if (l2.length > MAX_LINE) l2 = l2.slice(0, MAX_LINE - 1) + "…";
-  return [l1, l2];
-}
+/** 칸 색 — 목업 그대로. 난이도는 색으로 구분하지 않습니다. */
+const TILE_COLORS = {
+  none: { ring: "#252A32", bg: "#161A20", fg: "#8F98A4" },
+  A: { ring: "#7BA0FC", bg: "#4A7BFA", fg: "#0B0D10" },
+  B: { ring: "#DAA8FC", bg: "#C77CFA", fg: "#0B0D10" },
+};
+const SELECTED_RING = "#FFFFFF";
 
 /**
- * Renders the board into an existing SVG element. Pure: clears and redraws.
- *   svgEl: SVGSVGElement
- *   board: Array<{ tileId, q, r, difficulty, missionId }>
- *   claimed: Array<{ tileId, side, missionId, claimedAt }>
- *   missions: Map<id, { displayName, ... }>
- *   onHover(tileId, MouseEvent), onLeave()
+ * 마름모 바깥 변. 좌표는 목업의 폴리라인을 그대로 옮긴 것이고(칸 너비 100 = --w),
+ * 색만 실제 규칙에 맞췄습니다 — A 는 r=0 ↔ r=4(위아래), B 는 q=0 ↔ q=4(좌우).
  */
-export function renderBoardSvg(svgEl, { board, claimed, missions, onHover, onLeave } = {}) {
-  svgEl.innerHTML = "";
-  svgEl.setAttribute("viewBox", "-300 -200 600 400");
-  svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
+const BOUNDS = [
+  { side: "a", points: "197.75,22.37 259,-12.99 311.25,17.18 363.5,-12.99 415.75,17.18 468,-12.99 520.25,17.18 572.5,-12.99 624.75,17.18 677,-12.99 738.25,22.37" },
+  { side: "b", points: "738.25,22.37 738.25,93.1 686,123.26 686,183.59 633.75,213.76 633.75,274.09 581.5,304.25 581.5,364.58 529.25,394.75 529.25,455.08 468,490.44" },
+  { side: "a", points: "468,490.44 415.75,460.27 363.5,490.44 311.25,460.27 259,490.44 206.75,460.27 154.5,490.44 102.25,460.27 50,490.44 -11.25,455.08" },
+  { side: "b", points: "-11.25,455.08 -11.25,384.35 41,354.19 41,293.86 93.25,263.69 93.25,203.36 145.5,173.2 145.5,112.87 197.75,82.7 197.75,22.37" },
+];
 
-  // No board yet (room is still in `waiting` state): leave the SVG empty so the
-  // A/B boundary outlines don't show up before there are any tiles. They render
-  // together once match_start arrives.
+/**
+ * 보드를 `holder` 안에 그립니다. 보드가 아직 없으면(대기 중인 방) 비워 둡니다 —
+ * 빈 마름모 윤곽만 떠 있으면 매치가 시작된 것처럼 보입니다.
+ */
+export function renderBoard(holder, { board, claimed, missions, selected, onSelect } = {}) {
+  holder.innerHTML = "";
   if (!board || board.length === 0) return;
-
-  drawBoundary(svgEl);
 
   const claimedMap = new Map();
   for (const c of claimed ?? []) claimedMap.set(c.tileId, c);
 
-  for (const tile of board ?? []) {
-    const { x, y } = pixelFor(tile.q, tile.r);
-    const claim = claimedMap.get(tile.tileId);
-
-    const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("transform", `translate(${x}, ${y})`);
-
-    const poly = document.createElementNS(SVG_NS, "polygon");
-    poly.setAttribute("points", hexPath());
-    let cls = `hex ${tile.difficulty}`;
-    if (claim) cls += ` claimed-${claim.side.toLowerCase()}`;
-    poly.setAttribute("class", cls);
-    poly.dataset.tileId = tile.tileId;
-    group.appendChild(poly);
-
-    const m = missions?.get(tile.missionId);
-    const [line1, line2] = labelLines((m?.displayName ?? tile.missionId).trim());
-
-    const label = document.createElementNS(SVG_NS, "text");
-    label.setAttribute("class", "hex-label");
-    label.setAttribute("x", "0");
-    label.setAttribute("y", "0");
-    label.setAttribute("text-anchor", "middle");
-
-    const top = document.createElementNS(SVG_NS, "tspan");
-    top.setAttribute("x", "0");
-    top.setAttribute("dy", line2 ? "-2" : "0");
-    top.textContent = line1;
-    label.appendChild(top);
-
-    if (line2) {
-      const bot = document.createElementNS(SVG_NS, "tspan");
-      bot.setAttribute("x", "0");
-      bot.setAttribute("dy", "10");
-      bot.textContent = line2;
-      label.appendChild(bot);
-    }
-    group.appendChild(label);
-
-    if (onHover) poly.addEventListener("mousemove", (ev) => onHover(tile.tileId, ev));
-    if (onLeave) poly.addEventListener("mouseleave", onLeave);
-
-    svgEl.appendChild(group);
+  const rows = new Map();
+  for (const tile of board) {
+    if (!rows.has(tile.r)) rows.set(tile.r, []);
+    rows.get(tile.r).push(tile);
   }
+  const rowKeys = [...rows.keys()].sort((a, b) => a - b);
+  for (const k of rowKeys) rows.get(k).sort((a, b) => a.q - b.q);
+
+  const grid = document.createElement("div");
+  grid.className = "hexgrid";
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "board-bounds");
+  svg.setAttribute("viewBox", "-34 -34 795 546");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  for (const b of BOUNDS) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    line.setAttribute("points", b.points);
+    line.setAttribute("class", b.side);
+    line.setAttribute("vector-effect", "non-scaling-stroke");
+    svg.appendChild(line);
+  }
+  grid.appendChild(svg);
+
+  // 목업과 같이 행들은 따로 감쌉니다. 경계선 SVG 가 절대 배치라 형제로 두면 첫 행의
+  // 겹침 오프셋을 지우는 `:first-child` 가 SVG 쪽에 걸립니다.
+  const stack = document.createElement("div");
+  grid.appendChild(stack);
+
+  rowKeys.forEach((k, idx) => {
+    const row = document.createElement("div");
+    row.className = "hrow";
+    // 아래 행일수록 왼쪽으로 밀립니다. 5행이면 목업의 2.09 / 1.5675 / 1.045 / 0.5225 / 0.
+    const shift = ((rowKeys.length - 1 - idx) * 0.5225).toFixed(4);
+    row.style.marginLeft = `calc(var(--w) * ${shift})`;
+
+    for (const tile of rows.get(k)) {
+      const claim = claimedMap.get(tile.tileId);
+      const color = TILE_COLORS[claim?.side ?? "none"] ?? TILE_COLORS.none;
+
+      const cell = document.createElement("div");
+      cell.className = "hcell";
+      cell.style.background = selected === tile.tileId ? SELECTED_RING : color.ring;
+
+      const inner = document.createElement("i");
+      inner.style.background = color.bg;
+      inner.style.color = color.fg;
+      inner.textContent = (missions?.get(tile.missionId)?.displayName ?? tile.missionId).trim();
+
+      cell.appendChild(inner);
+      if (onSelect) cell.addEventListener("click", () => onSelect(tile.tileId));
+      row.appendChild(cell);
+    }
+    stack.appendChild(row);
+  });
+
+  holder.appendChild(grid);
 }
 
+/* ---------------------------------------------------------------- 관전 */
+
 /**
- * Mounts the live spectator UI into a container element and connects to the
- * room. Returns a `cleanup()` function that closes the WS and detaches DOM.
+ * 관전 UI 를 붙이고 방에 접속합니다. 정리 함수를 돌려줍니다.
+ *
+ * `L` 은 app.js 의 문구 사전, `lang` 은 시간 표기용입니다.
  */
-export function mountSpectator(container, roomCode) {
-  container.innerHTML = `
-    <div class="spectator">
-      <div class="spectator-bar">
-        <a href="#/" class="back">← 홈으로</a>
-        <div class="spec-meta">
-          <span id="conn-state">연결 대기</span>
-          <span id="room-info"></span>
-          <span id="match-state"></span>
-        </div>
-      </div>
-
-      <div class="spec-grid">
-        <aside class="spec-side">
-          <div class="player side-a" data-side="A" title="클릭하면 내 진영으로 지정">
-            <span class="badge">A</span>
-            <span class="name" data-bind="player-a">—</span>
-            <span class="me-badge">나</span>
-            <span class="claimed" data-bind="claimed-a">0</span>
-          </div>
-          <div class="player side-b" data-side="B" title="클릭하면 내 진영으로 지정">
-            <span class="badge">B</span>
-            <span class="name" data-bind="player-b">—</span>
-            <span class="me-badge">나</span>
-            <span class="claimed" data-bind="claimed-b">0</span>
-          </div>
-          <div class="legend">
-            <div class="legend-row">
-              <span class="chip easy">Easy</span>
-              <span class="chip medium">Medium</span>
-              <span class="chip hard">Hard</span>
-            </div>
-            <div class="legend-row">
-              <span class="chip claimed-a">A 점유</span>
-              <span class="chip claimed-b">B 점유</span>
-            </div>
-          </div>
-        </aside>
-
-        <div class="board-wrap">
-          <svg id="board"></svg>
-          <div id="hex-tooltip" class="hex-tooltip"></div>
-        </div>
-
-        <section class="claim-log">
-          <h3>최근 클레임</h3>
-          <ol id="log"></ol>
-        </section>
-      </div>
-    </div>
-  `;
-
-  const $ = (sel) => container.querySelector(sel);
-
-  const state = {
+export function mountSpectator(container, roomCode, L, lang) {
+  const s = {
     ws: null,
-    url: defaultWsUrl(),
     roomCode,
     missions: new Map(),
     board: [],
     claimed: [],
     status: "waiting",
+    seed: null,
+    startedAt: null,
     players: { A: null, B: null },
+    selected: null,
+    conn: "",
+    winner: null,
+    log: [],
+    tick: null,
   };
 
-  function setConn(text, cls = "") {
-    const el = $(".spec-meta");
-    el.classList.remove("connected", "error");
-    if (cls) el.classList.add(cls);
-    $("#conn-state").textContent = text;
+  const esc = escapeHtml;
+  const nameOf = (side) => s.players[side]?.name ?? "—";
+  const eloOf = (side) => (s.players[side]?.elo != null ? `${s.players[side].elo} ELO · ` : "");
+
+  function counts() {
+    let a = 0, b = 0;
+    for (const c of s.claimed) (c.side === "A" ? a++ : b++);
+    return { a, b };
   }
 
-  function showTooltip(tileId, ev) {
-    const tooltip = $("#hex-tooltip");
-    const tile = state.board.find((t) => t.tileId === tileId);
-    if (!tile) return;
-    const mission = state.missions.get(tile.missionId);
-    const name = mission?.displayName ?? tile.missionId;
-    const claim = state.claimed.find((c) => c.tileId === tileId);
-    const claimInfo = claim ? `<span class="claim-info">[${claim.side} 점유]</span>` : "";
-    tooltip.innerHTML =
-      `<span class="difficulty ${tile.difficulty}">${tile.difficulty.toUpperCase()}</span>` +
-      `${escapeHtml(name)}${claimInfo}`;
-    const wrap = $(".board-wrap");
-    const rect = wrap.getBoundingClientRect();
-    tooltip.style.left = `${ev.clientX - rect.left + 12}px`;
-    tooltip.style.top = `${ev.clientY - rect.top + 12}px`;
-    tooltip.classList.add("visible");
+  function clockText() {
+    if (!s.startedAt || s.status !== "playing") return "--:--";
+    const t = Math.max(0, Math.floor((Date.now() - s.startedAt) / 1000));
+    return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
   }
 
-  function hideTooltip() {
-    $("#hex-tooltip").classList.remove("visible");
+  function selectedInfo() {
+    if (!s.selected) return { label: L.pickTile, detail: "", coord: "", owner: "", ownerCls: "" };
+    const tile = s.board.find((t) => t.tileId === s.selected);
+    if (!tile) return { label: L.pickTile, detail: "", coord: "", owner: "", ownerCls: "" };
+    const m = s.missions.get(tile.missionId);
+    const claim = s.claimed.find((c) => c.tileId === s.selected);
+    return {
+      label: m?.displayName ?? tile.missionId,
+      detail: tile.difficulty.toUpperCase(),
+      coord: tile.tileId,
+      owner: claim ? `${claim.side} ${L.claimedVerb.replace("·", "").trim()}` : L.unclaimed,
+      ownerCls: claim ? claim.side.toLowerCase() : "",
+    };
   }
 
-  function rerender() {
-    renderBoardSvg($("#board"), {
-      board: state.board,
-      claimed: state.claimed,
-      missions: state.missions,
-      onHover: showTooltip,
-      onLeave: hideTooltip,
+  function draw() {
+    const { a, b } = counts();
+    const total = s.board.length || 25;
+    const sel = selectedInfo();
+
+    container.innerHTML = `
+      <a class="back" href="#/live">${L.backLive}</a>
+      <div class="spec">
+        <div class="spec-main">
+          <div class="spec-head">
+            <div class="spec-vs">
+              <div class="spec-p">
+                <div class="nm"><span class="dot a"></span><span>${esc(nameOf("A"))}</span></div>
+                <div class="sub">${eloOf("A")}${L.dirA}</div>
+              </div>
+              <div class="vs">vs</div>
+              <div class="spec-p">
+                <div class="nm"><span class="dot b"></span><span>${esc(nameOf("B"))}</span></div>
+                <div class="sub">${eloOf("B")}${L.dirB}</div>
+              </div>
+            </div>
+            <div class="spec-clock">
+              <b>${clockText()}</b>
+              <span>${s.seed != null ? L.seedWord + esc(String(s.seed)) : esc(s.conn)}</span>
+            </div>
+          </div>
+
+          <div class="board-hold" id="board"></div>
+
+          ${s.winner ? `<div class="winner"><span class="dot" style="background:${s.winner.side === "B" ? "#C77CFA" : "#4A7BFA"}"></span><span>${esc(s.winner.text)}</span></div>` : ""}
+        </div>
+
+        <div class="spec-side">
+          <div class="spec-sec">
+            <div class="spec-k">${L.selTile}</div>
+            <div class="sel-name">${esc(sel.label)}</div>
+            ${sel.detail ? `<div class="sel-detail">${esc(sel.detail)}</div>` : ""}
+            ${sel.coord ? `<div class="sel-chips"><span class="chip">${esc(sel.coord)}</span><span class="chip ${sel.ownerCls}">${esc(sel.owner)}</span></div>` : ""}
+          </div>
+          <div class="counts">
+            <div>
+              <div class="spec-k">${L.claimedK}</div>
+              <div class="n"><span class="a">${a}</span><span class="s">/</span><span class="b">${b}</span></div>
+            </div>
+            <div class="prog">
+              <div class="spec-k">${L.chainK}</div>
+              <div class="bar"><i style="width:${Math.round(((a + b) / total) * 100)}%"></i></div>
+              <div class="lbl">${total - a - b} / ${total}</div>
+            </div>
+          </div>
+          <div class="log">
+            <div class="spec-k">${L.eventLog}</div>
+            <ol>${s.log.map(logRow).join("")}</ol>
+          </div>
+        </div>
+      </div>
+    `;
+
+    renderBoard(container.querySelector("#board"), {
+      board: s.board,
+      claimed: s.claimed,
+      missions: s.missions,
+      selected: s.selected,
+      onSelect: (id) => { s.selected = id; draw(); },
     });
-    $("#room-info").textContent = state.roomCode ? `방 ${state.roomCode}` : "";
-    $("#match-state").textContent = matchStateLabel(state.status);
-    const a = state.players.A;
-    const b = state.players.B;
-    $('[data-bind="player-a"]').textContent = a?.name ?? "—";
-    $('[data-bind="player-b"]').textContent = b?.name ?? "—";
-    let ca = 0, cb = 0;
-    for (const c of state.claimed) (c.side === "A" ? ca++ : cb++);
-    $('[data-bind="claimed-a"]').textContent = String(ca);
-    $('[data-bind="claimed-b"]').textContent = String(cb);
-    const me = mySide();
-    container.querySelectorAll(".player").forEach((el) => {
-      el.classList.toggle("is-me", el.dataset.side === me);
-    });
+  }
+
+  function logRow(e) {
+    const side = e.side.toLowerCase();
+    return `
+      <li>
+        <span class="t">${esc(e.time)}</span>
+        <span class="dot ${side}"></span>
+        <span class="msg"><span class="who ${side}">${esc(e.who)}</span> ${esc(L.claimedVerb)} <span class="what">${esc(e.label)}</span></span>
+      </li>`;
   }
 
   function pushLog(claim) {
-    const ul = $("#log");
-    if (!ul) return;
-    const li = document.createElement("li");
-    li.classList.add(`side-${claim.side.toLowerCase()}`);
-    const m = state.missions.get(claim.missionId);
-    const time = new Date(claim.claimedAt).toLocaleTimeString("ko-KR", { hour12: false });
-    li.textContent = `${time}  [${claim.side}] ${m?.displayName ?? claim.missionId}`;
-    ul.prepend(li);
-    while (ul.children.length > 40) ul.lastElementChild.remove();
-  }
-
-  function mySide() {
-    if (!state.roomCode) return null;
-    return localStorage.getItem(`mchx.me.${state.roomCode}`);
-  }
-  function setMySide(side) {
-    if (!state.roomCode) return;
-    const key = `mchx.me.${state.roomCode}`;
-    if (side) localStorage.setItem(key, side);
-    else localStorage.removeItem(key);
+    const m = s.missions.get(claim.missionId);
+    s.log.unshift({
+      time: new Date(claim.claimedAt).toLocaleTimeString(lang === "ko" ? "ko-KR" : "en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" }),
+      side: claim.side,
+      who: s.players[claim.side]?.name ?? claim.side,
+      label: m?.displayName ?? claim.missionId,
+    });
+    if (s.log.length > 40) s.log.pop();
   }
 
   function handle(msg) {
     switch (msg.type) {
       case "error":
-        setConn(`서버 오류: ${msg.message}`, "error");
-        return;
+        s.conn = msg.message; draw(); return;
       case "room_state":
-        state.roomCode = msg.roomCode;
-        state.status = msg.status;
-        if (msg.you) state.players[msg.you.side] = msg.you;
-        if (msg.opponent) state.players[msg.opponent.side] = msg.opponent;
-        rerender();
-        return;
+        s.roomCode = msg.roomCode;
+        s.status = msg.status;
+        if (msg.you) s.players[msg.you.side] = msg.you;
+        if (msg.opponent) s.players[msg.opponent.side] = msg.opponent;
+        draw(); return;
       case "match_start":
-        state.status = "playing";
-        state.board = msg.board;
-        state.claimed = msg.claimed;
-        rerender();
-        return;
+        s.status = "playing";
+        s.board = msg.board;
+        s.claimed = msg.claimed ?? [];
+        s.seed = msg.seed;
+        s.startedAt = msg.startsAt;
+        s.winner = null;
+        draw(); return;
       case "tile_claimed":
-        state.claimed = state.claimed.filter((c) => c.tileId !== msg.tileId);
-        state.claimed.push({
-          tileId: msg.tileId, side: msg.side, missionId: msg.missionId, claimedAt: msg.claimedAt,
-        });
-        rerender();
+        s.claimed = s.claimed.filter((c) => c.tileId !== msg.tileId);
+        s.claimed.push({ tileId: msg.tileId, side: msg.side, missionId: msg.missionId, claimedAt: msg.claimedAt });
         pushLog(msg);
-        return;
-      case "match_end":
-        state.status = "ended";
-        rerender();
-        const winner = msg.winner ? `${msg.winner} 승리` : "종료";
-        $("#match-state").textContent = `${winner} (${msg.reason})`;
-        return;
-      case "pong":
+        draw(); return;
+      case "match_end": {
+        s.status = "ended";
+        const who = msg.winner ? (s.players[msg.winner]?.name ?? msg.winner) : null;
+        s.winner = {
+          side: msg.winner ?? "A",
+          text: who
+            ? (lang === "ko" ? `${who} 승리 — 경기 종료 (${msg.reason})` : `${who} wins — match over (${msg.reason})`)
+            : (lang === "ko" ? `경기 종료 (${msg.reason})` : `Match over (${msg.reason})`),
+        };
+        draw(); return;
+      }
       default:
         return;
     }
   }
 
   function connect() {
-    if (state.ws) { try { state.ws.close(); } catch {} }
-    setConn("연결 중…");
-    const ws = new WebSocket(state.url);
-    state.ws = ws;
+    s.conn = lang === "ko" ? "연결 중…" : "connecting…";
+    const ws = new WebSocket(defaultWsUrl());
+    s.ws = ws;
     ws.onopen = () => {
-      setConn("연결됨", "connected");
-      ws.send(JSON.stringify({ type: "spectate", roomCode: state.roomCode }));
+      s.conn = "";
+      ws.send(JSON.stringify({ type: "spectate", roomCode: s.roomCode }));
     };
     ws.onmessage = (ev) => {
       let msg; try { msg = JSON.parse(ev.data); } catch { return; }
       handle(msg);
     };
-    ws.onclose = () => setConn("연결 끊김");
-    ws.onerror = () => setConn("연결 오류", "error");
+    ws.onclose = () => { s.conn = lang === "ko" ? "연결 끊김" : "disconnected"; draw(); };
+    ws.onerror = () => { s.conn = lang === "ko" ? "연결 오류" : "connection error"; draw(); };
   }
 
-  container.querySelectorAll(".player").forEach((el) => {
-    el.addEventListener("click", () => {
-      const side = el.dataset.side;
-      if (!side) return;
-      const current = mySide();
-      setMySide(current === side ? null : side);
-      rerender();
-    });
-  });
+  draw();
+  loadMissions()
+    .then((m) => { s.missions = m; draw(); connect(); })
+    .catch(() => { s.conn = lang === "ko" ? "미션 목록 로드 실패" : "failed to load objectives"; draw(); });
 
-  loadMissions().then((m) => {
-    state.missions = m;
-    rerender();
-    connect();
-  }).catch((err) => setConn(`미션 로드 실패: ${err.message}`, "error"));
+  // 경과 시간만 1초마다 갱신합니다.
+  s.tick = setInterval(() => {
+    const el = container.querySelector(".spec-clock b");
+    if (el) el.textContent = clockText();
+  }, 1000);
 
   return () => {
-    if (state.ws) {
-      try { state.ws.close(); } catch {}
-      state.ws = null;
-    }
+    if (s.tick) clearInterval(s.tick);
+    if (s.ws) { try { s.ws.close(); } catch {} s.ws = null; }
   };
-}
-
-function matchStateLabel(s) {
-  switch (s) {
-    case "waiting": return "대기 중";
-    case "starting": return "시작 중";
-    case "playing": return "진행 중";
-    case "ended": return "종료";
-    default: return s;
-  }
 }
 
 function escapeHtml(s) {

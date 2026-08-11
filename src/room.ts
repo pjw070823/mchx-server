@@ -487,12 +487,23 @@ export class Room {
 
   /** Serialisable snapshot for the public `/api/rooms` listing. No sockets. */
   summary(): RoomSummary {
+    let claimedA = 0;
+    let claimedB = 0;
+    for (const side of this.engine.claimedMap.values()) {
+      if (side === "A") claimedA++;
+      else claimedB++;
+    }
     return {
       code: this.code,
       status: this.status,
       capacity: this.requiredPlayers(),
       settings: this.settings,
       hostId: this.hostId,
+      // 진행 상황 — 목록 화면이 "얼마나 진행됐나"를 보여주려면 필요합니다.
+      claimedA,
+      claimedB,
+      boardSize: this.engine.board?.length ?? 0,
+      startedAt: this.engine.startedAt,
       players: [...this.players.values()].map((p) => ({
         id: p.id,
         name: p.name,
@@ -511,6 +522,13 @@ export interface RoomSummary {
   capacity: number;
   settings: RoomSettings;
   hostId: string | null;
+  /** 각 진영이 가져간 칸 수. 대기 중인 방은 둘 다 0입니다. */
+  claimedA: number;
+  claimedB: number;
+  /** 이번 매치의 전체 칸 수(보통 25). 보드가 없으면 0. */
+  boardSize: number;
+  /** 매치 시작 시각(ms). 대기 중이면 null — 목록의 경과 시간 표시에 씁니다. */
+  startedAt: number | null;
   players: Array<{
     id: string;
     name: string;
