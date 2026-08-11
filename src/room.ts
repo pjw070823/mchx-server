@@ -530,6 +530,7 @@ export class Room {
       type: "room_state",
       roomCode: this.code,
       status: this.status,
+      origin: this.origin,
       you: you ? toPlayerInfo(you) : null,
       opponent: opp ? toPlayerInfo(opp) : null,
       hostId: this.hostId,

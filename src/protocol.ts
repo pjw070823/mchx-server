@@ -9,8 +9,14 @@ import { z } from "zod";
  * failing halfway through a match.
  *
  * 1 — first versioned protocol; adds the `hello` handshake and account verification.
+ * 2 — ranked queue: `join_queue`/`leave_queue`/`queue_state`, and `room_state.origin`.
+ *
+ * A v1 client is still served (see MIN_SUPPORTED_PROTOCOL); it simply never sends the
+ * queue messages. The bump exists so `hello_ok.protocolVersion` works as a capability
+ * signal — the mod greys out 랭크전 against an older server and says why, rather than
+ * opening a queue screen that hangs on `bad_message`.
  */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const Difficulty = z.enum(["easy", "medium", "hard"]);
 export type Difficulty = z.infer<typeof Difficulty>;
@@ -48,6 +54,9 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   waterBreathing: true,
   rated: true,
 };
+
+/** Mirrors `RoomOrigin` in room-config.ts. Declared here so it can cross the wire. */
+export const RoomOriginSchema = z.enum(["custom", "ranked"]);
 
 export const EloChange = z.object({
   before: z.number().int(),
@@ -140,6 +149,20 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("ping"),
   }),
+  /**
+   * Enter the ranked queue.
+   *
+   * Deliberately field-less. Identity comes only from the verified account on the
+   * connection — a `playerName` here would be ignored, which is exactly the confusion
+   * `create_room.uuid` already causes. No mode field either: the ladder preset is fixed,
+   * and a 2v2 ladder would be a second queue rather than a parameter on this one.
+   */
+  z.object({
+    type: z.literal("join_queue"),
+  }),
+  z.object({
+    type: z.literal("leave_queue"),
+  }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
@@ -171,6 +194,15 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("room_state"),
     roomCode: z.string(),
     status: RoomStatus,
+    /**
+     * How the room was made.
+     *
+     * The mod needs this to decide where a finished match returns to — the room screen
+     * for a custom game, the match menu for a ranked one — and whether leaving the world
+     * should send `leave_room`. Tracking "I came from the queue" client-side would mean
+     * clearing that flag on five separate exit paths; the server already knows.
+     */
+    origin: RoomOriginSchema,
     you: PlayerInfo.nullable(),
     opponent: PlayerInfo.nullable(),
     hostId: z.string().nullable(),
@@ -226,6 +258,27 @@ export const ServerMessage = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("pong"),
+  }),
+  /**
+   * The queue's view of this connection. Sent on entry, every few seconds while waiting,
+   * and once more when the slot ends.
+   *
+   * `queued: false` with `reason: "matched"` is immediately followed by `room_state` and
+   * `match_start` — the client should not treat it as a return to idle.
+   */
+  z.object({
+    type: z.literal("queue_state"),
+    queued: z.boolean(),
+    /** Why the slot ended. Null while still queued. */
+    reason: z.enum(["cancelled", "matched", "disconnected", "closed"]).nullable(),
+    /** Server-measured wait. The client extrapolates with its own clock, not this epoch. */
+    waitingMs: z.number().int(),
+    /** People queued, including this one. */
+    size: z.number().int(),
+    /** Rating snapshot taken at entry — what the search is actually centred on. */
+    elo: z.number().int(),
+    /** Current ELO search half-width, so the wait is legible rather than mysterious. */
+    window: z.number().int(),
   }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;

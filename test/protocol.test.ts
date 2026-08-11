@@ -34,6 +34,13 @@ import type { ServerMessage } from "../src/protocol.js";
 const CLIENT_FIXTURES: ReadonlyArray<{ name: string; json: string; type: string }> = [
   {
     name: "hello",
+    json: '{"type":"hello","protocolVersion":2,"clientVersion":"mchx 0.1.1"}',
+    type: "hello",
+  },
+  // Kept at 1 deliberately: MIN_SUPPORTED_PROTOCOL says a v1 mod is still served, and
+  // this is the only thing that would notice if the schema stopped accepting one.
+  {
+    name: "hello from a v1 mod",
     json: '{"type":"hello","protocolVersion":1,"clientVersion":"mchx 0.1.1"}',
     type: "hello",
   },
@@ -86,6 +93,8 @@ const CLIENT_FIXTURES: ReadonlyArray<{ name: string; json: string; type: string 
   },
   { name: "world_event forfeit", json: '{"type":"world_event","kind":"forfeit","text":"항복"}', type: "world_event" },
   { name: "spectate", json: '{"type":"spectate","roomCode":"TFQY"}', type: "spectate" },
+  { name: "join_queue", json: '{"type":"join_queue"}', type: "join_queue" },
+  { name: "leave_queue", json: '{"type":"leave_queue"}', type: "leave_queue" },
 ];
 
 describe("protocol contract — messages the mod sends", () => {
@@ -169,12 +178,30 @@ const SERVER_REQUIRED: ReadonlyArray<{
       type: "room_state",
       roomCode: "TFQY",
       status: "waiting",
+      origin: "custom",
       you: { id: "p1", name: "samarian00", side: "A", uuid: null, elo: 500 },
       opponent: null,
       hostId: "p1",
       settings: DEFAULT_SETTINGS,
     },
-    required: { roomCode: "string", status: "string", settings: "object" },
+    required: { roomCode: "string", status: "string", origin: "string", settings: "object" },
+  },
+  {
+    name: "queue_state",
+    msg: {
+      type: "queue_state",
+      queued: true,
+      reason: null,
+      waitingMs: 4_000,
+      size: 3,
+      elo: 512,
+      window: 180,
+    },
+    // Every one of these is rendered on the queue screen. A missing field decodes to a
+    // Kotlin default rather than failing, so the symptom would be a silently blank UI.
+    required: {
+      queued: "boolean", waitingMs: "number", size: "number", elo: "number", window: "number",
+    },
   },
   {
     name: "match_start",
@@ -276,6 +303,7 @@ describe("protocol contract — messages the server sends", () => {
       type: "room_state",
       roomCode: "TFQY",
       status: "waiting",
+      origin: "custom",
       you: null,
       opponent: null,
       hostId: null,
@@ -295,6 +323,7 @@ describe("protocol contract — messages the server sends", () => {
         type: "room_state",
         roomCode: "TFQY",
         status: status as never,
+        origin: "custom",
         you: null,
         opponent: null,
         hostId: null,
@@ -307,5 +336,40 @@ describe("protocol contract — messages the server sends", () => {
       type: "tile_claimed", tileId: "0,0", side: "B", missionId: "m", claimedAt: 0,
     })) as { side: string };
     assert.equal(wire.side, "B", "sides are uppercase A/B");
+  });
+
+  it("spells room origins exactly as the mod's RoomOrigin expects", () => {
+    for (const origin of ["custom", "ranked"] as const) {
+      const wire = JSON.parse(encode({
+        type: "room_state",
+        roomCode: "TFQY",
+        status: "waiting",
+        origin,
+        you: null,
+        opponent: null,
+        hostId: null,
+        settings: DEFAULT_SETTINGS,
+      })) as { origin: string };
+      assert.equal(wire.origin, origin);
+    }
+  });
+
+  it("ships every field the queue screen reads", () => {
+    // A missing one decodes to a Kotlin default instead of throwing, so the failure
+    // mode is a queue screen showing 0명 / ±0 rather than anything that looks broken.
+    const wire = JSON.parse(encode({
+      type: "queue_state",
+      queued: true,
+      reason: null,
+      waitingMs: 12_000,
+      size: 2,
+      elo: 640,
+      window: 340,
+    })) as Record<string, unknown>;
+
+    assert.equal(wire.waitingMs, 12_000);
+    assert.equal(wire.size, 2);
+    assert.equal(wire.elo, 640);
+    assert.equal(wire.window, 340);
   });
 });
