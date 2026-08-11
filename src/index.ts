@@ -8,7 +8,10 @@ import { decode } from "./protocol.js";
 import { RoomRegistry } from "./room.js";
 import { ALL_MISSIONS } from "./missions.js";
 import { mountApiRoutes } from "./api-routes.js";
-import { handleClientMessage, handleClose, sendError, type ConnState } from "./handlers.js";
+import {
+  handleClientMessage, handleClose, sendError, type ConnState, type ServerDeps,
+} from "./handlers.js";
+import { Matchmaker } from "./matchmaker.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -43,7 +46,20 @@ const RATE_BUCKET_REFILL_PER_SEC = 20;
  */
 const EMPTY_ROOM_TTL_MS = 60_000;
 
+/**
+ * How often half-dead sockets are swept.
+ *
+ * Required by the queue rather than nice to have: a pairing goes straight into a rated
+ * match with no accept step, so a socket that stopped answering must not keep its slot
+ * and get handed a real opponent. Two missed pongs closes it, which routes into the
+ * normal removePlayer → grace → forfeit path.
+ */
+const PING_INTERVAL_MS = 30_000;
+
 const rooms = new RoomRegistry();
+const matchmaker = new Matchmaker({ rooms });
+matchmaker.start();
+const deps: ServerDeps = { rooms, matchmaker };
 
 setInterval(() => {
   const reaped = rooms.reapIdle(EMPTY_ROOM_TTL_MS);
@@ -150,6 +166,8 @@ wss.on("connection", (ws, req) => {
   conns.set(ws, state);
   console.log(`[ws] connect ${state.playerId} from ${remoteAddr ?? "?"}`);
 
+  ws.on("pong", () => { state.isAlive = true; });
+
   ws.on("message", (raw) => {
     // Rate-limit before doing any parsing work.
     if (!consumeToken(state)) {
@@ -173,7 +191,7 @@ wss.on("connection", (ws, req) => {
       console.log(`[ws] ${state.playerId} <- ${text.slice(0, 200)}`);
     }
 
-    handleClientMessage(ws, state, msg, rooms);
+    handleClientMessage(ws, state, msg, deps);
   });
 
   ws.on("close", () => {
@@ -183,9 +201,30 @@ wss.on("connection", (ws, req) => {
       if (current <= 1) connsByIp.delete(remoteAddr);
       else connsByIp.set(remoteAddr, current - 1);
     }
-    handleClose(ws, state, rooms);
+    handleClose(ws, state, deps);
   });
 });
+
+/**
+ * Close sockets that stopped answering.
+ *
+ * A TCP connection can look open long after the peer is gone — no FIN arrives from a
+ * killed process on a dropped network. Without this, such a socket keeps its queue slot
+ * and can be paired into a rated match nobody will ever play.
+ */
+setInterval(() => {
+  for (const ws of wss.clients) {
+    const state = conns.get(ws);
+    if (!state) continue;
+    if (!state.isAlive) {
+      console.warn(`[ws] ${state.playerId} missed two pings — terminating`);
+      ws.terminate();
+      continue;
+    }
+    state.isAlive = false;
+    ws.ping();
+  }
+}, PING_INTERVAL_MS).unref();
 
 httpServer.listen(PORT, () => {
   console.log(`mchx api/ws server listening on http://localhost:${PORT}`);

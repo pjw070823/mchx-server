@@ -3,12 +3,20 @@ import type { ClientMessage } from "./protocol.js";
 import { PROTOCOL_VERSION } from "./protocol.js";
 import type { RoomRegistry } from "./room.js";
 import type { ConnState } from "./conn-state.js";
+import type { Matchmaker } from "./matchmaker.js";
+import { QUEUE_ERROR_TEXT } from "./matchmaker.js";
 import { send, sendError } from "./wire.js";
 import { issueChallenge, verifyChallenge } from "./auth.js";
 
 // Re-exported so existing importers (index.ts, tests) don't care that these moved.
 export type { ConnState } from "./conn-state.js";
 export { send, sendError } from "./wire.js";
+
+/** Everything a message handler is allowed to reach. */
+export interface ServerDeps {
+  readonly rooms: RoomRegistry;
+  readonly matchmaker: Matchmaker;
+}
 
 /**
  * Oldest protocol this build still speaks. Raise it when an old client would do
@@ -31,8 +39,9 @@ export function handleClientMessage(
   ws: WebSocket,
   state: ConnState,
   msg: ClientMessage,
-  rooms: RoomRegistry,
+  deps: ServerDeps,
 ): void {
+  const { rooms, matchmaker } = deps;
   switch (msg.type) {
     case "ping":
       return send(ws, { type: "pong" });
@@ -52,10 +61,25 @@ export function handleClientMessage(
       return;
 
     case "create_room":
-      return createRoom(ws, state, msg, rooms);
+      return createRoom(ws, state, msg, deps);
 
     case "join_room":
-      return joinRoom(ws, state, msg, rooms);
+      return joinRoom(ws, state, msg, deps);
+
+    case "join_queue": {
+      if (!requireHello(ws, state)) return;
+      // enqueue() is the sole authority on who may queue — replicating any of its
+      // checks here would give the rules a second place to drift.
+      const result = matchmaker.enqueue(state, ws);
+      if (!result.ok) return sendError(ws, result.code, QUEUE_ERROR_TEXT[result.code]);
+      return; // enqueue() already sent the opening queue_state
+    }
+
+    case "leave_queue":
+      // Silent when not queued, mirroring `leave_room`. A cancel that races a pairing
+      // arrives after the slot is gone, and that is not an error the player caused.
+      matchmaker.dequeue(state, "cancelled");
+      return;
 
     case "update_settings": {
       if (!state.room || state.isSpectator) return sendError(ws, "no_room", "not in a room");
@@ -78,7 +102,7 @@ export function handleClientMessage(
     }
 
     case "spectate":
-      return spectate(ws, state, msg, rooms);
+      return spectate(ws, state, msg, deps);
 
     case "leave_room":
       return leaveRoom(ws, state, rooms);
@@ -111,7 +135,12 @@ export function handleClientMessage(
  * released, a finished room with nobody watching is deleted — are reachable from a test
  * without standing up a WebSocket server.
  */
-export function handleClose(ws: WebSocket, state: ConnState, rooms: RoomRegistry): void {
+export function handleClose(ws: WebSocket, state: ConnState, deps: ServerDeps): void {
+  // BEFORE the `state.room` check below: a queued connection has no room by
+  // construction, so putting this second would leak every slot on disconnect.
+  deps.matchmaker.dequeue(state, "disconnected");
+
+  const rooms = deps.rooms;
   if (!state.room) return;
 
   if (state.isSpectator) {
@@ -197,15 +226,19 @@ function createRoom(
   ws: WebSocket,
   state: ConnState,
   msg: Extract<ClientMessage, { type: "create_room" }>,
-  rooms: RoomRegistry,
+  deps: ServerDeps,
 ): void {
+  const { rooms, matchmaker } = deps;
   if (!requireHello(ws, state)) return;
   if (state.room) return sendError(ws, "already_in_room", "leave first");
+  if (matchmaker.isQueued(state)) {
+    return sendError(ws, "already_queued", "cancel the queue first");
+  }
 
   const { uuid, name } = identityOf(state, msg.playerName);
-  // One account, one room. Blocks the obvious self-play setup.
-  if (uuid && rooms.findRoomContainingUuid(uuid)) {
-    return sendError(ws, "uuid_in_use", "this account is already in a room");
+  // One account, one room — and one account cannot be queued and in a room at once.
+  if (uuid && (rooms.findRoomContainingUuid(uuid) || matchmaker.hasUuid(uuid))) {
+    return sendError(ws, "uuid_in_use", "this account is already queued or in a room");
   }
 
   const room = rooms.create();
@@ -223,10 +256,14 @@ function joinRoom(
   ws: WebSocket,
   state: ConnState,
   msg: Extract<ClientMessage, { type: "join_room" }>,
-  rooms: RoomRegistry,
+  deps: ServerDeps,
 ): void {
+  const { rooms, matchmaker } = deps;
   if (!requireHello(ws, state)) return;
   if (state.room) return sendError(ws, "already_in_room", "leave first");
+  if (matchmaker.isQueued(state)) {
+    return sendError(ws, "already_queued", "cancel the queue first");
+  }
   const room = rooms.get(msg.roomCode);
   if (!room) return sendError(ws, "room_not_found", `no room ${msg.roomCode}`);
 
@@ -247,8 +284,8 @@ function joinRoom(
     }
 
     const elsewhere = rooms.findRoomContainingUuid(uuid);
-    if (elsewhere && elsewhere !== room) {
-      return sendError(ws, "uuid_in_use", "this account is already in another room");
+    if ((elsewhere && elsewhere !== room) || matchmaker.hasUuid(uuid)) {
+      return sendError(ws, "uuid_in_use", "this account is already queued or in another room");
     }
   }
 
@@ -274,9 +311,15 @@ function spectate(
   ws: WebSocket,
   state: ConnState,
   msg: Extract<ClientMessage, { type: "spectate" }>,
-  rooms: RoomRegistry,
+  deps: ServerDeps,
 ): void {
+  const { rooms, matchmaker } = deps;
   if (state.room) return sendError(ws, "already_in_room", "leave first");
+  // Watching from the queue would mean holding a slot you cannot be pulled out of
+  // cleanly — a pairing would seat a connection that is already a spectator.
+  if (matchmaker.isQueued(state)) {
+    return sendError(ws, "already_queued", "cancel the queue first");
+  }
 
   const now = Date.now();
   if (now < state.spectateBlockedUntil) {
