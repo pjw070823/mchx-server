@@ -48,6 +48,41 @@ describe("difficultyFor", () => {
     for (const { q, r } of allCoords()) counts[difficultyFor(q, r)]++;
     assert.deepEqual(counts, { easy: 12, medium: 8, hard: 5 });
   });
+
+  /**
+   * The hard tiles are not merely "the middle" — they are a cut. No winning chain, for
+   * either side, can avoid all five, which is the entire reason the difficulty is placed
+   * by q+r rather than by distance from the centre.
+   *
+   * The proof is one line: q+r moves by at most 1 per step, and every chain starts on a
+   * tile with q+r ≤ 4 and ends on one with q+r ≥ 4, so it lands on exactly 4 somewhere.
+   * Pinning the step size pins the property.
+   */
+  it("puts the hard tiles on a line no chain can step over", () => {
+    for (const { q, r } of allCoords()) {
+      for (const n of neighbors(q, r)) {
+        const { q: nq, r: nr } = parseTileId(n);
+        const jump = Math.abs(nq + nr - (q + r));
+        assert.ok(jump <= 1, `(${q},${r}) -> (${nq},${nr}) jumps ${jump} anti-diagonals`);
+      }
+    }
+
+    // And the endpoints straddle it: every start tile is at or below d=4, every goal at
+    // or above. Together with the step size, crossing d=4 is unavoidable.
+    for (let i = 0; i < BOARD_SIZE; i++) {
+      assert.ok(i + 0 <= 4 && i + (BOARD_SIZE - 1) >= 4, "A's edges straddle the hard line");
+      assert.ok(0 + i <= 4 && BOARD_SIZE - 1 + i >= 4, "B's edges straddle the hard line");
+    }
+  });
+
+  it("refuses a win to a side that claims everything short of the hard line", () => {
+    // 10 tiles, all connected, touching one full edge for each side — and still no win,
+    // because the chain has to step onto d=4 to reach the far side.
+    const below = allCoords().filter(({ q, r }) => q + r < 4).map(({ q, r }) => tileId(q, r));
+    assert.equal(below.length, 10);
+    assert.equal(hasWon("A", allBy("A", below)), false);
+    assert.equal(hasWon("B", allBy("B", below)), false);
+  });
 });
 
 describe("neighbors", () => {

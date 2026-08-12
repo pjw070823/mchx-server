@@ -70,7 +70,10 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
     rows.get(tile.r).push(tile);
   }
   const rowKeys = [...rows.keys()].sort((a, b) => a - b);
-  for (const k of rowKeys) rows.get(k).sort((a, b) => a.q - b.q);
+  // q 는 내림차순 — 행이 왼쪽으로 밀려 내려가므로, 어떤 칸의 오른쪽 아래에 그려지는
+  // 칸이 서버 기준 이웃 (q-1, r+1) 이어야 합니다. q 오름차순은 판을 좌우로 뒤집어서,
+  // 맞물려 보이는 칸이 실제로는 이웃이 아니고 하드 대각선도 서로 닿지 않게 됩니다.
+  for (const k of rowKeys) rows.get(k).sort((a, b) => b.q - a.q);
 
   const grid = document.createElement("div");
   grid.className = "hexgrid";
