@@ -124,6 +124,16 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("leave_room"),
   }),
+  /**
+   * Concede the running match without giving up the seat.
+   *
+   * Distinct from `leave_room` on purpose. Leaving a room happens to end a match you
+   * were in; conceding ends the match and nothing else — which is what lets both
+   * players land back in the same custom room afterwards.
+   */
+  z.object({
+    type: z.literal("forfeit"),
+  }),
   z.object({
     type: z.literal("update_settings"),
     settings: RoomSettings.partial(),

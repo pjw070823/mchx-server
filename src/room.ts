@@ -245,6 +245,24 @@ export class Room {
   }
 
   /**
+   * Concede the match but stay seated.
+   *
+   * [forfeitByLeave] removes the player, because there the forfeit is a side effect of
+   * leaving. Here it is the whole intent: the match is settled for the opponent and both
+   * seats are left exactly as they were, so a custom room can be played again without
+   * anyone re-entering a code.
+   */
+  forfeitMatch(playerId: string): boolean {
+    if (this.status !== "playing") return false;
+    const quitter = this.players.get(playerId);
+    if (!quitter || !quitter.side) return false;
+
+    const winner: Side = quitter.side === "A" ? "B" : "A";
+    this.endMatch(winner, "forfeit", null);
+    return true;
+  }
+
+  /**
    * Remove a player and, if a match was running, settle it for whoever is left.
    *
    * The session is always deleted *before* the still-playing check. Gating first would

@@ -70,6 +70,7 @@ const CLIENT_FIXTURES: ReadonlyArray<{ name: string; json: string; type: string 
   },
   // Kotlin `object` variants carry the discriminator and nothing else.
   { name: "leave_room", json: '{"type":"leave_room"}', type: "leave_room" },
+  { name: "forfeit", json: '{"type":"forfeit"}', type: "forfeit" },
   { name: "start_match", json: '{"type":"start_match"}', type: "start_match" },
   { name: "world_ready", json: '{"type":"world_ready"}', type: "world_ready" },
   { name: "ping", json: '{"type":"ping"}', type: "ping" },

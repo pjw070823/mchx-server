@@ -107,6 +107,14 @@ export function handleClientMessage(
     case "leave_room":
       return leaveRoom(ws, state, rooms);
 
+    case "forfeit": {
+      if (!state.room || state.isSpectator) return sendError(ws, "no_match", "not in a match");
+      // Silent when there is no live match — a second press, or one that raced the
+      // opponent's win, is not something the player did wrong.
+      state.room.forfeitMatch(state.playerId);
+      return;
+    }
+
     case "claim": {
       if (!state.room || state.isSpectator) return sendError(ws, "no_match", "not in a match");
       return state.room.attemptClaim(state.playerId, msg.tileId, msg.missionId);

@@ -426,6 +426,79 @@ describe("Room — world_ready deadline", () => {
   });
 });
 
+/**
+ * "게임 포기하기" — conceding the match without giving up the seat.
+ *
+ * The distinction from `forfeitByLeave` is the whole point of the message existing: a
+ * custom room has to still be there, with the same code and settings, when both clients
+ * drop out of the world a few seconds later.
+ */
+describe("Room — conceding without leaving", () => {
+  it("hands the win to the opponent and tells both sides at once", () => {
+    const { room, a, b } = playingRoom();
+    assert.equal(room.forfeitMatch("p1"), true);
+
+    for (const { sock, who } of [{ sock: a.sock, who: "quitter" }, { sock: b.sock, who: "opponent" }]) {
+      const ended = sock.last("match_end");
+      assert.equal(ended?.winner, "B", `${who} was not told who won`);
+      // The mod keys its 5s exit hold off this string; anything else holds for 10s.
+      assert.equal(ended?.reason, "forfeit", `${who} got the wrong reason`);
+    }
+  });
+
+  it("keeps a custom room rematch-ready: same code, same settings, both seats", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+    room.updateSettings("p1", { saturation: false });
+    const before = { code: room.code, settings: { ...room.settings }, host: room.hostId };
+
+    room.startMatchByHost("p1");
+    room.markReady("p1");
+    room.markReady("p2");
+    room.forfeitMatch("p1");
+
+    assert.equal(room.size(), 2, "conceding must not free either seat");
+    assert.equal(room.status, "waiting", "the room has to accept a rematch");
+    assert.equal(room.code, before.code);
+    assert.equal(room.hostId, before.host);
+    assert.deepEqual(room.settings, before.settings, "the toggled preset must survive");
+  });
+
+  it("leaves a ranked room ended rather than reopening it", () => {
+    const { room } = rankedMatch({ a: VERIFIED.a, b: VERIFIED.b });
+    room.forfeitMatch("p1");
+
+    assert.equal(room.status, "ended");
+  });
+
+  it("moves ratings — conceding a ranked match costs the same as losing one", () => {
+    const { room, b } = rankedMatch({ a: VERIFIED.a, b: VERIFIED.b });
+    room.forfeitMatch("p1");
+
+    const changes = b.sock.last("match_end")?.eloChanges as Record<string, { delta: number }>;
+    assert.ok(changes.p1 && changes.p2, "both players should get an elo entry");
+    assert.ok(changes.p1.delta < 0, "the conceding side must lose rating");
+    assert.ok(changes.p2.delta > 0, "the opponent must gain it");
+  });
+
+  it("is a no-op outside a live match", () => {
+    const room = new Room(FAST);
+    const a = seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+
+    assert.equal(room.forfeitMatch("p1"), false, "nothing to concede while waiting");
+    assert.equal(a.sock.all("match_end").length, 0);
+    assert.equal(room.status, "waiting");
+  });
+
+  it("ignores a stranger and a spectator", () => {
+    const { room } = playingRoom();
+    assert.equal(room.forfeitMatch("nobody"), false);
+    assert.equal(room.status, "playing", "a spectator must not be able to end the match");
+  });
+});
+
 describe("Room — leaving and disconnects", () => {
   it("settles an explicit mid-match leave as a forfeit for the opponent", () => {
     const { room, b } = playingRoom();
