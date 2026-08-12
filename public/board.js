@@ -250,6 +250,8 @@ export function mountSpectator(container, roomCode, L, lang) {
     players: { A: null, B: null },
     selected: null,
     conn: "",
+    /** Set when the server says there is no such room — a dead end, not a hiccup. */
+    gone: false,
     winner: null,
     log: [],
     tick: null,
@@ -264,6 +266,17 @@ export function mountSpectator(container, roomCode, L, lang) {
   }
 
   function draw() {
+    // A code that matches nothing needs to say so plainly. Rendering an empty board with
+    // an apologetic caption under the clock reads as "loading", and never stops.
+    if (s.gone) {
+      container.innerHTML = `
+        <a class="back" href="#/live">${L.backLive}</a>
+        <div class="rows"><div class="row" style="cursor:default">
+          <div class="state" style="width:100%">${escapeHtml(L.noSuchRoom.replace("%s", s.roomCode))}</div>
+        </div></div>`;
+      return;
+    }
+
     const { a, b } = countSides(s.claimed);
 
     container.innerHTML = specMarkup({
@@ -301,7 +314,10 @@ export function mountSpectator(container, roomCode, L, lang) {
   function handle(msg) {
     switch (msg.type) {
       case "error":
-        s.conn = msg.message; draw(); return;
+        if (msg.code === "room_not_found") s.gone = true;
+        s.conn = msg.message;
+        draw();
+        return;
       case "room_state":
         s.roomCode = msg.roomCode;
         s.status = msg.status;

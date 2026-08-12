@@ -50,6 +50,7 @@ const T = {
     kPrivate: "비공개 경기", codePh: "코드", codeBtn: "보기",
     codeNote: "비공개 판은 목록에 뜨지 않습니다. 받은 코드를 입력하세요.",
     codeErr: "그 코드로 열린 판이 없습니다.",
+    noSuchRoom: "%s — 그런 방이 없습니다. 코드를 다시 확인해 주세요.",
     backLive: "← 중계 목록",
     tagRanked: "랭크", tagCasual: "일반", tagWaiting: "대기",
     watch: "보기 →", waiting: "대기 중",
@@ -90,6 +91,7 @@ const T = {
     kPrivate: "PRIVATE MATCH", codePh: "CODE", codeBtn: "Watch",
     codeNote: "Private boards are never listed. Enter the code the players gave you.",
     codeErr: "No live board is running on that code.",
+    noSuchRoom: "%s — no such room. Check the code and try again.",
     backLive: "← ALL LIVE MATCHES",
     tagRanked: "RANKED", tagCasual: "CASUAL", tagWaiting: "WAITING",
     watch: "Watch →", waiting: "waiting",
@@ -382,21 +384,12 @@ function wireLive() {
     const code = (document.getElementById("codeIn").value || "").trim().toUpperCase();
     if (code.length !== 4) return;
     state.codeInput = code;
-    // 없는 코드로 보내면 관전 화면이 빈 채로 남으므로 미리 확인합니다.
-    const exists = state.rooms.some((r) => r.code === code);
-    if (!exists) {
-      try {
-        const { rooms } = await api("/api/rooms");
-        state.rooms = rooms ?? [];
-      } catch { /* 무시 */ }
-    }
-    if (state.rooms.some((r) => r.code === code)) {
-      state.codeError = false;
-      location.hash = `#/board/${code}`;
-    } else {
-      state.codeError = true;
-      route();
-    }
+    state.codeError = false;
+    // 목록과 대조하지 않고 그대로 넘깁니다. 이 입력창의 안내문 자체가 "비공개 판은
+    // 목록에 뜨지 않는다"고 말하는데, 목록에 있어야만 통과시키면 앞뒤가 맞지 않습니다.
+    // 끝난 랭크 방도 마찬가지로 목록에서 빠지지만 수거 전까지는 관전할 수 있습니다.
+    // 방이 있는지 아는 건 서버뿐이므로, 판단은 관전 소켓에 맡깁니다.
+    location.hash = `#/board/${code}`;
   });
 }
 
