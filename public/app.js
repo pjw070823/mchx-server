@@ -36,14 +36,12 @@ function detectOs() {
 const T = {
   ko: {
     nav1: "소개", nav3: "중계", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
-    eyebrow: "패브릭 모드 · 마인크래프트 26.1.2",
     ctaWatch: "중계 보러 가기", ctaDl: "모드 내려받기",
     statPool: "전체 목표", statPlayers: "등록 플레이어", statPlayed: "누적 판수",
     rulesKicker: "규칙", rulesH: "목표 25개짜리 판 하나, 먼저 잇는 쪽이 이깁니다.",
     r1: "64개 목표 중 25개가 뽑혀 5×5 육각 판에 깔립니다. 두 사람 모두 같은 판, 같은 시드로 시작합니다.",
     r2: "목표를 깨면 그 칸이 내 색으로 넘어옵니다. 턴 순서도 없고, 한 번 넘어간 칸은 다시 뺏기지 않습니다.",
     r3: "한쪽은 위아래, 다른 쪽은 좌우를 잇습니다. 자기 두 변이 끊김 없이 연결되는 순간 판이 끝납니다.",
-    rulesNote: "목표는 매 판 새로 뽑히기 때문에 같은 판이 두 번 나오는 일은 없습니다. 판이 끝나고 남는 건 레이팅뿐입니다.",
     kLive: "중계", liveH: "진행 중인 판", updated: "방금 갱신", noLive: "지금 열려 있는 판이 없습니다.",
     kPrivate: "비공개 경기", codePh: "코드", codeBtn: "보기",
     codeNote: "비공개 판은 목록에 뜨지 않습니다. 받은 코드를 입력하세요.",
@@ -70,19 +68,17 @@ const T = {
     dlJar: "저장소 보기", changelog: "커밋 기록",
     requires: "필요한 것", notRequired: "필요 없는 것",
     nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "중계용 설치",
-    footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다", source: "소스",
+    footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다",
     stepsTitle: "설치 순서",
   },
   en: {
     nav1: "Overview", nav3: "Live", nav4: "Ranks", nav5: "Install", getMod: "Get the mod",
-    eyebrow: "FABRIC CLIENT · MINECRAFT 26.1.2",
     ctaWatch: "Watch a live match", ctaDl: "Get the client mod",
     statPool: "OBJECTIVE POOL", statPlayers: "RATED PLAYERS", statPlayed: "MATCHES PLAYED",
     rulesKicker: "THE RULES", rulesH: "Twenty-five objectives, one board, two edges to link.",
     r1: "Twenty-five objectives are drawn from a pool of 64 and dealt onto a 5×5 hex board. Both players get the same board and the same world seed.",
     r2: "Finishing an objective claims its tile. There is no turn order, nothing to spend, and a tile cannot be taken back once it is claimed.",
     r3: "One player links top to bottom, the other left to right. First unbroken run of tiles between your own two edges ends the match.",
-    rulesNote: "Objectives are drawn fresh for every match, so the same board never comes up twice. Nothing carries over between games except your rating.",
     kLive: "LIVE", liveH: "Live boards", updated: "just updated", noLive: "No boards are running right now.",
     kPrivate: "PRIVATE MATCH", codePh: "CODE", codeBtn: "Watch",
     codeNote: "Private boards are never listed. Enter the code the players gave you.",
@@ -110,7 +106,7 @@ const T = {
     requires: "REQUIRES", notRequired: "NOT REQUIRED",
     nr1: "A server to host", nr2: "A separate account — your Minecraft account signs you in", nr3: "Anything installed to watch",
     stepsTitle: "INSTALL STEPS",
-    footer: "MINECRAFT HEX · COMMUNITY PROJECT · NOT AFFILIATED WITH MOJANG", source: "Source",
+    footer: "MINECRAFT HEX · COMMUNITY PROJECT · NOT AFFILIATED WITH MOJANG",
   },
 };
 const t = () => T[state.lang];
@@ -183,9 +179,6 @@ function header() {
   const L = t();
   const on = (p) => (state.page === p ? " on" : "");
   const live = state.rooms.length;
-  const label = state.lang === "ko"
-    ? (live ? `${live}판 중계 중` : "중계 중인 판 없음")
-    : (live ? `${live} LIVE NOW` : "NOTHING LIVE");
   return `
     <div class="hdr">
       <a class="hdr-brand" href="#/" aria-label="MINECRAFT HEX">
@@ -199,7 +192,6 @@ function header() {
         <a href="#/install"${on("install") ? ' class="on"' : ""}>${L.nav5}</a>
       </nav>
       <div class="hdr-right">
-        <div class="hdr-live${live ? " on" : ""}"><i></i><span>${label}</span></div>
         <div class="lang">
           <button data-lang="en" class="${state.lang === "en" ? "on" : ""}">EN</button>
           <button data-lang="ko" class="${state.lang === "ko" ? "on" : ""}">한국어</button>
@@ -216,10 +208,6 @@ function footer() {
     <div class="ftr">
       <span class="mark"></span>
       <span class="txt">${L.footer}</span>
-      <span class="links">
-        <a href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">${L.source}</a>
-        <a href="/api/missions" target="_blank" rel="noopener">API</a>
-      </span>
     </div>
   `;
 }
@@ -260,7 +248,6 @@ function pageHome() {
   return `
     <div class="hero">
       <div>
-        <div class="hero-eyebrow">${L.eyebrow}</div>
         <img class="hero-logo" src="/logo.png" alt="MINECRAFT HEX" width="321" height="280" />
         <div class="hero-btns">
           <a class="cta cta-lg" href="#/live">${L.ctaWatch}</a>
@@ -284,7 +271,6 @@ function pageHome() {
         <div class="rule"><i>01</i><p>${L.r1}</p></div>
         <div class="rule"><i>02</i><p>${L.r2}</p></div>
         <div class="rule"><i>03</i><p>${L.r3}</p></div>
-        <div class="rules-note">${L.rulesNote}</div>
       </div>
     </div>
   `;
@@ -618,20 +604,12 @@ async function route() {
   render(pageHome());
 }
 
-/** 헤더의 중계 표시등만 주기적으로 갱신합니다. */
+/** 중계 목록을 주기적으로 다시 받아, 그 화면을 보고 있으면 다시 그립니다. */
 async function pollRooms() {
   try {
     const { rooms } = await api("/api/rooms");
     const changed = (rooms ?? []).length !== state.rooms.length;
     state.rooms = rooms ?? [];
-    const pill = document.querySelector(".hdr-live");
-    if (pill) {
-      pill.classList.toggle("on", state.rooms.length > 0);
-      const n = state.rooms.length;
-      pill.querySelector("span").textContent = state.lang === "ko"
-        ? (n ? `${n}판 중계 중` : "중계 중인 판 없음")
-        : (n ? `${n} LIVE NOW` : "NOTHING LIVE");
-    }
     if (changed && state.page === "live") { render(pageLive()); wireLive(); }
   } catch { /* 표시등은 있으면 좋은 것 */ }
 }

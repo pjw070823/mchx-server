@@ -18,7 +18,6 @@ body {
 a { color: #4a7bfa; text-decoration: none; }
 a:hover { color: #7ba0fc; }
 ::selection { background: #4a7bfa; color: #0b0d10; }
-@keyframes pulsedot { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 .mono { font-family: "JetBrains Mono", "Noto Sans KR", monospace; }
 .hex-clip { clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
@@ -69,13 +68,6 @@ a:hover { color: #7ba0fc; }
 }
 
 .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
-.hdr-live {
-  display: flex; align-items: center; gap: 7px; white-space: nowrap;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 11px; color: #8a929e;
-}
-.hdr-live i { width: 6px; height: 6px; border-radius: 50%; background: #333a44; }
-.hdr-live.on i { background: #4a7bfa; animation: pulsedot 2s ease-in-out infinite; }
 
 .lang { display: flex; border: 1px solid #262b33; }
 .lang button {
@@ -137,11 +129,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   align-items: center;
   max-width: 1280px; margin: 0 auto;
   padding: 72px clamp(20px, 3vw, 40px) 84px;
-}
-.hero-eyebrow {
-  display: flex; gap: 10px; align-items: center;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 11px; letter-spacing: 0.16em; color: #4a7bfa; margin-bottom: 26px;
 }
 /* 헤드라인과 설명 문단이 있던 자리. 마크가 그 둘이 하던 말을 대신합니다.
    높이만 주고 폭은 비율에 맡깁니다 — 원본이 825×720 이라 1.146:1. */
@@ -212,10 +199,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   font-size: 11px; color: #4a7bfa; padding-top: 5px; flex-shrink: 0;
 }
 .rule p { margin: 0; font-size: 15.5px; line-height: 1.65; color: #b4bbc5; word-break: keep-all; }
-.rules-note {
-  margin-top: 6px; padding-top: 20px; border-top: 1px solid #1e232b;
-  font-size: 14px; line-height: 1.6; color: #7e8794; word-break: keep-all;
-}
 
 /* ------------------------------------------------------------------ 중계 */
 
@@ -527,11 +510,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 .ftr .txt {
   font-family: "JetBrains Mono", "Noto Sans KR", monospace;
   font-size: 11px; color: #5c646f; word-break: keep-all;
-}
-.ftr .links {
-  margin-left: auto; display: flex; gap: 22px;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 11px; color: #8a929e;
 }
 
 /* ------------------------------------------------------------------ 반응형 */
