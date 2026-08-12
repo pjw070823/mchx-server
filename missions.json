@@ -337,10 +337,10 @@
       "detector": { "type": "advancement", "id": "minecraft:nether/obtain_ancient_debris" }
     },
     {
-      "id": "medium_xp_level_30",
-      "displayName": "레벨 30",
+      "id": "medium_xp_level_20",
+      "displayName": "레벨 20",
       "difficulty": "medium",
-      "detector": { "type": "custom", "key": "xp_level_30" }
+      "detector": { "type": "custom", "key": "xp_level_20" }
     },
     {
       "id": "medium_sneak_100",
@@ -407,19 +407,6 @@
       "difficulty": "medium",
       "detector": { "type": "custom", "key": "armor_stand_full" }
     },
-    {
-      "id": "medium_three_grass_types",
-      "displayName": "키 작은 잔디 / 고사리 / 키 작은 마른 잔디 모두 얻기",
-      "difficulty": "medium",
-      "detector": {
-        "type": "inventory_collection",
-        "items": [
-          "minecraft:short_grass",
-          "minecraft:fern",
-          "minecraft:short_dry_grass"
-        ]
-      }
-    },
 
     {
       "id": "hard_any_potion",
@@ -466,20 +453,17 @@
       "detector": { "type": "inventory_count", "item": "minecraft:enchanted_book", "count": 1 }
     },
     {
-      "id": "hard_all_dyes",
-      "displayName": "모든 염료 모으기 (16종)",
+      "id": "hard_dyes_14",
+      "displayName": "염료 14종 얻기",
       "difficulty": "hard",
-      "detector": {
-        "type": "inventory_collection",
-        "items": [
+      "detector": { "type": "inventory_distinct", "minDistinct": 14, "candidates": [
           "minecraft:white_dye", "minecraft:orange_dye", "minecraft:magenta_dye",
           "minecraft:light_blue_dye", "minecraft:yellow_dye", "minecraft:lime_dye",
           "minecraft:pink_dye", "minecraft:gray_dye", "minecraft:light_gray_dye",
           "minecraft:cyan_dye", "minecraft:purple_dye", "minecraft:blue_dye",
           "minecraft:brown_dye", "minecraft:green_dye", "minecraft:red_dye",
           "minecraft:black_dye"
-        ]
-      }
+        ] }
     },
     {
       "id": "hard_sea_lantern",
