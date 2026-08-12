@@ -54,6 +54,17 @@ const BOUNDS = [
 ];
 
 /**
+ * missionId → 프레임 수. `shared/pack-mission-icons.py` 가 만든 것을 그대로 받습니다.
+ * 실패하면 빈 채로 두어 보드가 이름으로 떨어지게 합니다 — 아이콘은 있으면 좋은 것이지
+ * 없으면 판을 못 읽는 물건이 아닙니다.
+ */
+let ICONS = {};
+fetch("/mission-icons/manifest.json")
+  .then((r) => (r.ok ? r.json() : {}))
+  .then((m) => { ICONS = m ?? {}; })
+  .catch(() => { ICONS = {}; });
+
+/**
  * 보드를 `holder` 안에 그립니다. 보드가 아직 없으면(대기 중인 방) 비워 둡니다 —
  * 빈 마름모 윤곽만 떠 있으면 매치가 시작된 것처럼 보입니다.
  */
@@ -114,7 +125,29 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
       const inner = document.createElement("i");
       inner.style.background = color.bg;
       inner.style.color = color.fg;
-      inner.textContent = (missions?.get(tile.missionId)?.displayName ?? tile.missionId).trim();
+      const name = (missions?.get(tile.missionId)?.displayName ?? tile.missionId).trim();
+
+      // 아이콘이 있으면 그림만, 없으면 예전처럼 이름. 아이콘은 한 번에 다 그려지는 게
+      // 아니라 몇 개씩 늘어나므로, 섞인 판이 정상 상태입니다.
+      const frames = ICONS[tile.missionId];
+      if (frames) {
+        // 정사각 창을 뚫고 그 안에서 스트립을 위로 밀어 올립니다. 배경 이미지로 하면
+        // 육각형이 세로로 긴 탓에 프레임이 정사각을 잃습니다.
+        const win = document.createElement("span");
+        win.className = "mi";
+        const img = document.createElement("img");
+        img.src = `/mission-icons/${tile.missionId}.png`;
+        img.alt = "";
+        if (frames > 1) {
+          // 모드와 같은 프레임 길이. 두 화면이 같은 속도여야 같은 아이콘으로 보입니다.
+          img.style.animation = `mi-frames ${frames * 0.4}s steps(${frames}) infinite`;
+        }
+        win.appendChild(img);
+        inner.appendChild(win);
+        inner.title = name;
+      } else {
+        inner.textContent = name;
+      }
 
       cell.appendChild(inner);
       if (onSelect) cell.addEventListener("click", () => onSelect(tile.tileId));
