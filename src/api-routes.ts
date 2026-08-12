@@ -3,6 +3,9 @@ import { ALL_MISSIONS } from "./missions.js";
 import type { RoomRegistry } from "./room.js";
 import {
   getAllMatches,
+  getReplayableMatches,
+  getReplayableCount,
+  getPlayerCount,
   getLeaderboard,
   getMatchById,
   getMatchCount,
@@ -42,7 +45,9 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
   });
 
   target.get("/api/leaderboard", (req, res) => {
-    res.json({ players: getLeaderboard(clampInt(req.query.limit, 50, 1, 200)) });
+    const limit = clampInt(req.query.limit, 50, 1, 200);
+    const offset = clampInt(req.query.offset, 0, 0, 1_000_000);
+    res.json({ players: getLeaderboard(limit, offset), total: getPlayerCount() });
   });
 
   target.get("/api/matches", (req, res) => {
@@ -83,7 +88,7 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
     const limit = clampInt(req.query.limit, 20, 1, 100);
     const offset = clampInt(req.query.offset, 0, 0, 1_000_000);
 
-    const replays = getAllMatches(limit, offset)
+    const replays = getReplayableMatches(limit, offset)
       .map((row) => {
         const claims = parseJsonArray(row.claimed_json);
         let claimedA = 0;
@@ -108,11 +113,11 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
             B: { name: row.player_b_name, elo: row.player_b_elo_after ?? row.player_b_elo_before },
           },
         };
-      })
-      // A match with no board was never dealt, so there is nothing to open.
-      .filter((r) => r.boardSize > 0);
+      });
 
-    res.json({ replays, total: getMatchCount() });
+    // Both the rows and the count come from the same WHERE, so a page is never
+    // short and the pager never offers a page that turns out to be empty.
+    res.json({ replays, total: getReplayableCount() });
   });
 
   /**

@@ -524,3 +524,26 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   .rank-head .c-pct, .rank-row .c-pct { display: none; }
   .row-clock, .row-watch { flex: 0 0 auto; }
 }
+
+/* ------------------------------------------------------------------ 페이지 */
+
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-top: 26px;
+}
+.pager button {
+  /* 44px 로 맞춘 높이. 10px 패딩이면 38 이라 손가락에 작습니다. */
+  padding: 13px 18px; border: 1px solid #262b33; background: transparent;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 11.5px; letter-spacing: 0.08em; color: #c6ccd5;
+  cursor: pointer; white-space: nowrap;
+}
+.pager button:hover:not(:disabled) { border-color: #4a7bfa; color: #4a7bfa; }
+.pager button:disabled { color: #4c545f; border-color: #1e232b; cursor: default; }
+.pager-at {
+  min-width: 74px; text-align: center;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 11.5px; letter-spacing: 0.08em; color: #c6ccd5;
+  font-variant-numeric: tabular-nums;
+}
+.pager-at i { font-style: normal; color: #5c646f; padding: 0 3px; }

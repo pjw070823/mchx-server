@@ -144,8 +144,9 @@ const applyMatchResultStmt: StatementSync = db.prepare(
    WHERE uuid = ?`,
 );
 const leaderboardStmt: StatementSync = db.prepare(
-  `SELECT * FROM players ORDER BY elo DESC, games_played DESC LIMIT ?`,
+  `SELECT * FROM players ORDER BY elo DESC, games_played DESC LIMIT ? OFFSET ?`,
 );
+const playerCountStmt: StatementSync = db.prepare(`SELECT COUNT(*) AS c FROM players`);
 const insertMatchStmt: StatementSync = db.prepare(
   `INSERT INTO matches (
      room_code, seed, started_at, ended_at, winner_side, reason,
@@ -162,6 +163,21 @@ const matchesByPlayerStmt: StatementSync = db.prepare(
 );
 const matchesAllStmt: StatementSync = db.prepare(
   `SELECT * FROM matches ORDER BY ended_at DESC LIMIT ? OFFSET ?`,
+);
+/**
+ * Matches that can actually be replayed.
+ *
+ * A match that ended before the board was dealt has nothing to play back. The list
+ * endpoint used to page over every row and drop those afterwards, which made a page
+ * come back short and made the total count pages that do not exist. Filtering in SQL
+ * lets the count and the page agree.
+ */
+const REPLAYABLE = `board_json IS NOT NULL AND board_json != '' AND board_json != '[]'`;
+const matchesReplayableStmt: StatementSync = db.prepare(
+  `SELECT * FROM matches WHERE ${REPLAYABLE} ORDER BY ended_at DESC LIMIT ? OFFSET ?`,
+);
+const replayableCountStmt: StatementSync = db.prepare(
+  `SELECT COUNT(*) AS c FROM matches WHERE ${REPLAYABLE}`,
 );
 const matchesByNameStmt: StatementSync = db.prepare(
   `SELECT * FROM matches
@@ -214,8 +230,22 @@ export function applyMatchResult(
   );
 }
 
-export function getLeaderboard(limit: number): PlayerRow[] {
-  return leaderboardStmt.all(Math.max(1, Math.min(200, limit))) as unknown as PlayerRow[];
+export function getLeaderboard(limit: number, offset = 0): PlayerRow[] {
+  const lim = Math.max(1, Math.min(200, limit));
+  return leaderboardStmt.all(lim, Math.max(0, offset)) as unknown as PlayerRow[];
+}
+
+export function getPlayerCount(): number {
+  return (playerCountStmt.get() as unknown as { c: number }).c;
+}
+
+export function getReplayableMatches(limit: number, offset: number): MatchRow[] {
+  const lim = Math.max(1, Math.min(100, limit));
+  return matchesReplayableStmt.all(lim, Math.max(0, offset)) as unknown as MatchRow[];
+}
+
+export function getReplayableCount(): number {
+  return (replayableCountStmt.get() as unknown as { c: number }).c;
 }
 
 export interface NewMatchRow {

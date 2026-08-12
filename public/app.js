@@ -21,6 +21,9 @@ const state = {
   replays: [],
   replaysTotal: null,
   ranks: [],
+  ranksTotal: null,
+  // 1-based, per list. Reset on route entry, moved only by the pager.
+  pages: { live: 1, replays: 1, ranks: 1 },
   stats: { pool: "—", players: "—", matches: "—" },
 };
 
@@ -35,19 +38,19 @@ function detectOs() {
 
 const T = {
   ko: {
-    nav1: "소개", nav3: "중계", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
-    ctaWatch: "중계 보러 가기", ctaDl: "모드 내려받기",
+    nav1: "소개", nav3: "라이브", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
+    ctaWatch: "라이브 보러 가기", ctaDl: "모드 내려받기",
     statPool: "전체 목표", statPlayers: "등록 플레이어", statPlayed: "누적 판수",
     rulesKicker: "규칙", rulesH: "목표 25개짜리 판 하나, 먼저 잇는 쪽이 이깁니다.",
     r1: "64개 목표 중 25개가 뽑혀 5×5 육각 판에 깔립니다. 두 사람 모두 같은 판, 같은 시드로 시작합니다.",
     r2: "목표를 깨면 그 칸이 내 색으로 넘어옵니다. 턴 순서도 없고, 한 번 넘어간 칸은 다시 뺏기지 않습니다.",
     r3: "한쪽은 위아래, 다른 쪽은 좌우를 잇습니다. 자기 두 변이 끊김 없이 연결되는 순간 판이 끝납니다.",
-    kLive: "중계", liveH: "진행 중인 판", updated: "방금 갱신", noLive: "지금 열려 있는 판이 없습니다.",
+    kLive: "라이브", liveH: "진행 중인 판", noLive: "지금 열려 있는 판이 없습니다.",
     kPrivate: "비공개 경기", codePh: "코드", codeBtn: "보기",
     codeNote: "비공개 판은 목록에 뜨지 않습니다. 받은 코드를 입력하세요.",
     codeErr: "그 코드로 열린 판이 없습니다.",
     noSuchRoom: "%s — 그런 방이 없습니다. 코드를 다시 확인해 주세요.",
-    backLive: "← 중계 목록",
+    backLive: "← 라이브 목록",
     tagRanked: "랭크", tagCasual: "일반", tagWaiting: "대기",
     watch: "보기 →", waiting: "대기 중",
     selTile: "선택한 칸", claimedK: "점령 현황", chainK: "남은 칸", eventLog: "이벤트 로그",
@@ -62,12 +65,13 @@ const T = {
     drawTag: "무승부", winTag: "승",
     kSeason: "랭킹", ranksH: "레이팅 순위표", noRanks: "아직 기록된 플레이어가 없습니다.",
     thRank: "순위", thPlayer: "플레이어", thWl: "전적", thPct: "승률",
+    prev: "이전", next: "다음",
     kInstall: "설치", dlH: "클라이언트 모드 내려받기",
-    dlP: "모드는 직접 플레이할 때만 필요합니다. 중계는 아무것도 깔지 않아도 볼 수 있습니다.",
+    dlP: "모드는 직접 플레이할 때만 필요합니다. 라이브는 아무것도 깔지 않아도 볼 수 있습니다.",
     relLine: "패브릭 · 마인크래프트 26.1.2 · 아직 공개 배포 전입니다",
     dlJar: "저장소 보기", changelog: "커밋 기록",
     requires: "필요한 것", notRequired: "필요 없는 것",
-    nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "중계용 설치",
+    nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "라이브 시청용 설치",
     footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다",
     stepsTitle: "설치 순서",
   },
@@ -79,7 +83,7 @@ const T = {
     r1: "Twenty-five objectives are drawn from a pool of 64 and dealt onto a 5×5 hex board. Both players get the same board and the same world seed.",
     r2: "Finishing an objective claims its tile. There is no turn order, nothing to spend, and a tile cannot be taken back once it is claimed.",
     r3: "One player links top to bottom, the other left to right. First unbroken run of tiles between your own two edges ends the match.",
-    kLive: "LIVE", liveH: "Live boards", updated: "just updated", noLive: "No boards are running right now.",
+    kLive: "LIVE", liveH: "Live boards", noLive: "No boards are running right now.",
     kPrivate: "PRIVATE MATCH", codePh: "CODE", codeBtn: "Watch",
     codeNote: "Private boards are never listed. Enter the code the players gave you.",
     codeErr: "No live board is running on that code.",
@@ -99,6 +103,7 @@ const T = {
     drawTag: "DRAW", winTag: "WON",
     kSeason: "LADDER", ranksH: "Rated leaderboard", noRanks: "No rated players yet.",
     thRank: "RANK", thPlayer: "PLAYER", thWl: "W / L", thPct: "WIN %",
+    prev: "Prev", next: "Next",
     kInstall: "INSTALL", dlH: "Get the client mod",
     dlP: "You only need the mod to play. Watching boards on this site needs nothing installed.",
     relLine: "Fabric · Minecraft 26.1.2 · not published yet",
@@ -289,7 +294,7 @@ async function loadStats() {
   };
 }
 
-/* -------------------------------------------------------------- 화면: 중계 */
+/* -------------------------------------------------------------- 화면: 라이브 */
 
 function matchRow(room) {
   const L = t();
@@ -330,12 +335,13 @@ function matchRow(room) {
 
 function pageLive() {
   const L = t();
-  const rooms = state.rooms;
+  const from = (state.pages.live - 1) * PAGE;
+  const rooms = state.rooms.slice(from, from + PAGE);
   return `
     <div class="wrap">
       <div class="live-top">
         <div>
-          <div class="kick live-kick"><span>${L.kLive}</span><span class="bar"></span><span class="upd">${L.updated}</span></div>
+          <div class="kick live-kick"><span>${L.kLive}</span><span class="bar"></span></div>
           <h2 class="h-lg">${L.liveH}</h2>
         </div>
         <div style="flex:0 1 auto;min-width:0">
@@ -351,6 +357,7 @@ function pageLive() {
       ${rooms.length
         ? `<div class="rows">${rooms.map(matchRow).join("")}</div>`
         : `<div class="rows"><div class="row" style="cursor:default"><div class="state" style="width:100%">${L.noLive}</div></div></div>`}
+      ${pager("live", state.pages.live, state.rooms.length)}
     </div>
   `;
 }
@@ -411,6 +418,39 @@ function replayRow(m) {
   `;
 }
 
+/** 한 화면에 올리는 줄 수. 세 목록이 같은 값을 씁니다. */
+const PAGE = 20;
+
+const pageCount = (total) => Math.max(1, Math.ceil((total ?? 0) / PAGE));
+
+/**
+ * 이전 / n · N / 다음.
+ *
+ * 한 쪽뿐이면 아무것도 그리지 않습니다 — 누를 데가 없는 컨트롤은 없느니만 못합니다.
+ */
+function pager(key, page, total) {
+  const pages = pageCount(total);
+  if (pages <= 1) return "";
+  const L = t();
+  return `
+    <div class="pager" data-pager="${key}">
+      <button type="button" data-go="${page - 1}"${page <= 1 ? " disabled" : ""}>‹ ${L.prev}</button>
+      <span class="pager-at">${page} <i>/</i> ${pages}</span>
+      <button type="button" data-go="${page + 1}"${page >= pages ? " disabled" : ""}>${L.next} ›</button>
+    </div>`;
+}
+
+/** 페이지 버튼에 `go` 를 물립니다. 목록마다 다시 그린 뒤 한 번씩 불러야 합니다. */
+function wirePager(key, go) {
+  document.querySelectorAll(`[data-pager="${key}"] button[data-go]`).forEach((b) => {
+    b.addEventListener("click", () => {
+      state.pages[key] = Number(b.dataset.go);
+      window.scrollTo({ top: 0, behavior: "instant" });
+      go();
+    });
+  });
+}
+
 function totalLine() {
   const n = state.replaysTotal;
   if (n == null) return "—";
@@ -434,6 +474,7 @@ function pageReplays() {
       ${rows.length
         ? `<div class="rows">${rows.map(replayRow).join("")}</div>`
         : `<div class="rows"><div class="row" style="cursor:default"><div class="state" style="width:100%">${L.noReplays}</div></div></div>`}
+      ${pager("replays", state.pages.replays, state.replaysTotal)}
     </div>
   `;
 }
@@ -455,18 +496,20 @@ function pageRanks() {
         <div class="r">ELO</div><div class="r">${L.thWl}</div><div class="r c-pct">${L.thPct}</div>
       </div>
       ${rows.map((p, i) => {
+        const rank = (state.pages.ranks - 1) * PAGE + i + 1;
         const total = (p.wins ?? 0) + (p.losses ?? 0) + (p.draws ?? 0);
         const wp = total ? `${Math.round(((p.wins ?? 0) / total) * 100)}%` : "—";
-        const top = i < 3 ? ` top${i + 1}` : "";
+        const top = rank <= 3 ? ` top${rank}` : "";
         return `
           <div class="rank-row${top}">
-            <div class="rank-n">${String(i + 1).padStart(2, "0")}</div>
+            <div class="rank-n">${String(rank).padStart(2, "0")}</div>
             <div class="rank-p"><span class="dot"></span><span>${escapeHtml(p.name ?? "")}</span></div>
             <div class="rank-elo">${p.elo ?? "—"}</div>
             <div class="rank-num">${p.wins ?? 0} / ${p.losses ?? 0}</div>
             <div class="rank-num c-pct">${wp}</div>
           </div>`;
       }).join("")}
+      ${pager("ranks", state.pages.ranks, state.ranksTotal)}
     </div>
   `;
 }
@@ -535,6 +578,63 @@ function wireInstall() {
 
 let cleanup = null;
 
+
+/* ------------------------------------------------------------ 목록 불러오기 */
+
+/**
+ * 목록 세 개의 적재 방식.
+ *
+ * 라이브는 한 번에 다 받아 잘라 씁니다 — 열려 있는 방은 많아야 몇 개고, 15초 폴링이
+ * 이미 전체를 받아오고 있어서 페이지마다 다시 부를 이유가 없습니다. 리플레이와 랭킹은
+ * 수천 줄까지 자랄 수 있으니 서버에서 offset 으로 한 쪽씩 받습니다.
+ */
+function showLive() {
+  render(pageLive());
+  wireLive();
+  wirePager("live", showLive);
+}
+
+async function loadLive() {
+  render(pageLive());
+  try {
+    const { rooms } = await api("/api/rooms");
+    state.rooms = rooms ?? [];
+  } catch { state.rooms = []; }
+  clampPage("live", state.rooms.length);
+  showLive();
+}
+
+async function loadReplays() {
+  render(pageReplays());
+  try {
+    const { replays, total } = await api(
+      `/api/replays?limit=${PAGE}&offset=${(state.pages.replays - 1) * PAGE}`,
+    );
+    state.replays = replays ?? [];
+    state.replaysTotal = total ?? null;
+  } catch { state.replays = []; }
+  render(pageReplays());
+  wirePager("replays", loadReplays);
+}
+
+async function loadRanks() {
+  render(pageRanks());
+  try {
+    const { players, total } = await api(
+      `/api/leaderboard?limit=${PAGE}&offset=${(state.pages.ranks - 1) * PAGE}`,
+    );
+    state.ranks = players ?? [];
+    state.ranksTotal = total ?? null;
+  } catch { state.ranks = []; }
+  render(pageRanks());
+  wirePager("ranks", loadRanks);
+}
+
+/** 목록이 줄어 현재 쪽이 사라졌으면 마지막 쪽으로 당깁니다. */
+function clampPage(key, total) {
+  state.pages[key] = Math.min(state.pages[key], pageCount(total));
+}
+
 async function route() {
   if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
 
@@ -558,37 +658,20 @@ async function route() {
 
   if (hash === "#/replays") {
     state.page = "replays";
-    render(pageReplays());
-    try {
-      const { replays, total } = await api("/api/replays?limit=50");
-      state.replays = replays ?? [];
-      state.replaysTotal = total ?? null;
-    } catch { state.replays = []; }
-    render(pageReplays());
-    return;
+    state.pages.replays = 1;
+    return loadReplays();
   }
 
   if (hash === "#/live") {
     state.page = "live";
-    render(pageLive());
-    try {
-      const { rooms } = await api("/api/rooms");
-      state.rooms = rooms ?? [];
-    } catch { state.rooms = []; }
-    render(pageLive());
-    wireLive();
-    return;
+    state.pages.live = 1;
+    return loadLive();
   }
 
   if (hash === "#/ranks") {
     state.page = "ranks";
-    render(pageRanks());
-    try {
-      const { players } = await api("/api/leaderboard?limit=100");
-      state.ranks = players ?? [];
-    } catch { state.ranks = []; }
-    render(pageRanks());
-    return;
+    state.pages.ranks = 1;
+    return loadRanks();
   }
 
   if (hash === "#/install") {
@@ -604,13 +687,16 @@ async function route() {
   render(pageHome());
 }
 
-/** 중계 목록을 주기적으로 다시 받아, 그 화면을 보고 있으면 다시 그립니다. */
+/** 라이브 목록을 주기적으로 다시 받아, 그 화면을 보고 있으면 다시 그립니다. */
 async function pollRooms() {
   try {
     const { rooms } = await api("/api/rooms");
     const changed = (rooms ?? []).length !== state.rooms.length;
     state.rooms = rooms ?? [];
-    if (changed && state.page === "live") { render(pageLive()); wireLive(); }
+    if (changed && state.page === "live") {
+      clampPage("live", state.rooms.length);
+      showLive();
+    }
   } catch { /* 표시등은 있으면 좋은 것 */ }
 }
 
