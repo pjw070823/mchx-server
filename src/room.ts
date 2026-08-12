@@ -128,7 +128,14 @@ export class Room {
     if (this.players.size >= this.requiredPlayers()) return null;
     if (this.status !== "waiting") return null;
 
-    const side: Side = this.players.size === 0 ? "A" : "B";
+    // Take the side nobody is sitting on, rather than deriving it from the head count.
+    // Counting was wrong the moment a seat was vacated and refilled: A leaving left one
+    // player on B, and the next arrival counted one occupant and took B as well. Two
+    // players on B, none on A, and the match still started — every claim went to the same
+    // side, so B could win alone and A could not win at all.
+    const side = this.freeSide();
+    if (!side) return null;
+
     let elo = DEFAULT_ELO;
     let gamesPlayed = 0;
     if (uuid) {
@@ -150,6 +157,15 @@ export class Room {
     // Ranked rooms are run by the matchmaker and have no host to promote.
     if (this.origin === "custom" && this.hostId === null) this.hostId = playerId;
     return session;
+  }
+
+  /** The seat colour nobody holds, or null when both are taken. */
+  private freeSide(): Side | null {
+    const taken = new Set<Side>();
+    for (const p of this.players.values()) {
+      if (p.side) taken.add(p.side);
+    }
+    return (["A", "B"] as const).find((s) => !taken.has(s)) ?? null;
   }
 
   getPlayer(playerId: string): PlayerSession | null {

@@ -78,6 +78,35 @@ describe("Room — seating", () => {
   });
 });
 
+describe("Room — seats are coloured, not counted", () => {
+  it("gives a refilled seat the colour that was vacated", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+    room.removePlayer("p1"); // A walks out of the lobby
+    const carol = room.addPlayer("p3", "Carol", null, new FakeWs().ws);
+
+    assert.equal(carol?.side, "A", "the empty side is A, so Carol takes A");
+    const sides = [...room.players_iter()].map((p) => p.side).sort();
+    assert.deepEqual(sides, ["A", "B"], "a match with two players on one side is unplayable");
+  });
+
+  it("holds the colours whichever seat is vacated", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+    room.removePlayer("p2"); // B walks out instead
+    assert.equal(room.addPlayer("p3", "Carol", null, new FakeWs().ws)?.side, "B");
+  });
+
+  it("refuses a third player rather than seating them without a side", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+    assert.equal(room.addPlayer("p3", "Carol", null, new FakeWs().ws), null);
+  });
+});
+
 describe("Room — settings", () => {
   it("only lets the host change settings", () => {
     const room = new Room(FAST);
@@ -105,6 +134,27 @@ describe("Room — settings", () => {
   it("rejects changes once the match is under way", () => {
     const { room } = playingRoom();
     assert.equal(room.updateSettings("p1", { saturation: false }), false);
+  });
+
+  it("will not switch a room to a mode the game cannot play", () => {
+    // 2v2 is in the wire schema and nowhere else. Accepting it took requiredPlayers() to
+    // four, which no 1v1 room can ever reach — the host would brick their own room from
+    // a frame the mod's own button refuses to send.
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    room.updateSettings("p1", { gameMode: "2v2" });
+
+    assert.equal(room.settings.gameMode, "1v1", "the unplayable mode must be dropped");
+    assert.equal(room.requiredPlayers(), 2);
+  });
+
+  it("keeps the rest of a patch that also asks for 2v2", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    room.updateSettings("p1", { gameMode: "2v2", saturation: false });
+
+    assert.equal(room.settings.gameMode, "1v1");
+    assert.equal(room.settings.saturation, false, "one bad field must not void the others");
   });
 });
 

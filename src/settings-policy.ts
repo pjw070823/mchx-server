@@ -27,7 +27,12 @@ type Policy = { readonly [K in keyof RoomSettings]: FieldRule<K> };
  * a field to `tier1` is the whole change when supporter perks ship.
  */
 export const SETTINGS_POLICY: Policy = {
-  gameMode: { requiredTier: "free" },
+  // 2v2 is in the schema but not in the game: the board has two sides, `addPlayer` has
+  // two seats, and `hasWon` asks about two edges. Accepting it made `requiredPlayers()`
+  // four, so the room could never reach a startable state — and if it somehow did, the
+  // third and fourth arrivals had no seat colour left to take. The mod's button is
+  // already inert; this stops a hand-written frame doing what the button won't.
+  gameMode: { requiredTier: "free", accepts: (mode) => mode === "1v1" },
   inventorySave: { requiredTier: "free" },
   saturation: { requiredTier: "free" },
   nightVision: { requiredTier: "free" },
