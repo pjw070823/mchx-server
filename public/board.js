@@ -133,6 +133,7 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
       if (frames) {
         // 정사각 창을 뚫고 그 안에서 스트립을 위로 밀어 올립니다. 배경 이미지로 하면
         // 육각형이 세로로 긴 탓에 프레임이 정사각을 잃습니다.
+        inner.classList.add("has-mi");
         const win = document.createElement("span");
         win.className = "mi";
         const img = document.createElement("img");

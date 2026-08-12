@@ -548,25 +548,18 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 }
 .pager-at i { font-style: normal; color: #5c646f; padding: 0 3px; }
 
-/* 미션 아이콘 — 세로 스트립 한 장을 프레임 수만큼 스텝으로 넘깁니다. 모드가 UV 로
-   같은 스트립을 자르는 것과 같은 그림, 같은 속도입니다. */
-.hexgrid .hcell > i.mi {
-  padding: 0;
-  background-repeat: no-repeat;
-  background-position: 0 0;
-  /* 육각형은 가운데 띠에서만 폭이 꽉 차므로 그 안에 들어가게 66% 로 둡니다. */
-  background-size: 66% calc(66% * var(--mi-frames));
-  image-rendering: pixelated;
-  animation: mi-frames steps(var(--mi-frames)) infinite;
-}
-.hexgrid .hcell > i.mi { background-position: 50% 0; }
-@keyframes mi-frames { to { background-position: 50% calc(66% * var(--mi-frames) * -1); } }
 
 /* 미션 아이콘 — 세로 스트립 한 장을 정사각 창 안에서 밀어 올립니다.
    `steps(N)` 은 이미지 높이의 -100% 까지를 N 등분하므로, 멈추는 자리가 정확히
    프레임 경계입니다. 모드가 UV 로 같은 스트립을 자르는 것과 같은 그림입니다. */
+/* 글자용 좌우 패딩을 끕니다. 그게 남으면 66% 가 타일 폭이 아니라 패딩 안쪽 기준이
+   되어, 같은 0.66 인데 인게임보다 작게 나옵니다. */
+.hexgrid .hcell > i.has-mi { padding: 0; }
 .hexgrid .hcell > i .mi {
-  display: block; width: 66%; aspect-ratio: 1;
+  /* 66% 는 타일 바깥 폭 기준입니다(모드와 같은 값). `.hcell` 의 링 패딩 2px 때문에
+     여기서 그냥 66% 를 쓰면 0.66*(w-4) 가 되어 인게임보다 작아집니다. 차이는 폭과
+     무관하게 늘 0.66*4 = 2.64px 이라 상수로 되돌릴 수 있습니다. */
+  display: block; width: calc(66% + 2.64px); aspect-ratio: 1;
   overflow: hidden; position: relative;
 }
 .hexgrid .hcell > i .mi img {
