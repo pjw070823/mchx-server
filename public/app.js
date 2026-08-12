@@ -316,8 +316,11 @@ function matchRow(room) {
   const b = (room.players ?? []).find((p) => p.side === "B");
   const playing = room.status === "playing";
   const size = room.boardSize || 25;
-  const tag = !playing ? L.tagWaiting : room.settings?.rated ? L.tagRanked : L.tagCasual;
-  const tagCls = !playing ? "private" : room.settings?.rated ? "ranked" : "private";
+  // 랭크 여부는 방이 어떻게 만들어졌는지로 정해집니다. 예전에는 설정 토글을 봤는데,
+  // 커스텀 방이 레이팅에 반영되지 않게 되면서 그 토글 자체가 없어졌습니다.
+  const ranked = room.origin === "ranked";
+  const tag = !playing ? L.tagWaiting : ranked ? L.tagRanked : L.tagCasual;
+  const tagCls = !playing ? "private" : ranked ? "ranked" : "private";
 
   const side = (p, cls) => p
     ? `<div class="row-p"><span class="dot ${cls}"></span><span class="nm">${escapeHtml(p.name ?? "")}</span><span class="el">${p.elo ?? "—"}</span></div>`

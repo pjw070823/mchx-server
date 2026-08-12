@@ -1,4 +1,5 @@
 import type { BoardTile, ClaimedTile, EloChange, RoomSettings, Side } from "./protocol.js";
+import type { RoomOrigin } from "./room-config.js";
 import { applyMatchResult, inTransaction, recordMatch } from "./db.js";
 import { computeNewElo } from "./elo.js";
 import type { PlayerSession } from "./session.js";
@@ -10,6 +11,8 @@ export interface SettlementInput {
   readonly board: readonly BoardTile[];
   readonly claimedLog: readonly ClaimedTile[];
   readonly settings: RoomSettings;
+  /** Only a `ranked` room can move ratings. See [resolveRated]. */
+  readonly origin: RoomOrigin;
   /** Side A's session, even if they have already been removed from the room. */
   readonly a: PlayerSession | null;
   readonly b: PlayerSession | null;
@@ -97,7 +100,11 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
 /**
  * Decide whether this match may move ratings.
  *
- * Three ways to lose that right:
+ * Only a ranked room can count at all: custom rooms let you pick both your opponent and
+ * your perks, which is everything a ladder needs to not be. That used to be a per-room
+ * toggle, which meant the answer lived in two places.
+ *
+ * Beyond that, three ways to lose the right:
  *
  *  - **Unauthenticated.** A session only carries a uuid if Mojang confirmed the account,
  *    so a null uuid means we do not know who this was. Rating an anonymous player would
@@ -107,8 +114,9 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
  *    siblings on one connection get caught too; they can still play, just not for rating.
  */
 function resolveRated(input: SettlementInput): { rated: boolean; unratedReason: string | null } {
-  const { a, b, settings } = input;
-  if (!settings.rated || !a || !b) return { rated: settings.rated, unratedReason: null };
+  const { a, b, origin } = input;
+  if (origin !== "ranked") return { rated: false, unratedReason: null };
+  if (!a || !b) return { rated: false, unratedReason: "incomplete" };
   if (!a.uuid || !b.uuid) return { rated: false, unratedReason: "unauthenticated" };
   if (a.uuid === b.uuid) return { rated: false, unratedReason: "same_uuid" };
   if (a.remoteAddr && b.remoteAddr && a.remoteAddr === b.remoteAddr) {

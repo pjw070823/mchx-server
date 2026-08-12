@@ -8,6 +8,7 @@ import {
 } from "./helpers.js";
 
 const { Room, RoomRegistry } = await import("../src/room.js");
+const { RANKED_SETTINGS } = await import("../src/settings-policy.js");
 
 let restoreConsole: () => void;
 before(() => { restoreConsole = muteConsole(); });
@@ -27,6 +28,17 @@ function playingRoom(
   const a = seat(room, "p1", "Alice", accounts.a ?? null);
   const b = seat(room, "p2", "Bob", accounts.b ?? null);
   room.startMatchByHost("p1");
+  room.markReady("p1");
+  room.markReady("p2");
+  return { room, a, b };
+}
+
+/** The ranked equivalent of [playingRoom] — the only kind of match that can rate. */
+function rankedMatch(accounts: { a?: string | null; b?: string | null } = {}) {
+  const room = new Room(FAST, "ranked");
+  const a = seat(room, "p1", "Alice", accounts.a ?? null);
+  const b = seat(room, "p2", "Bob", accounts.b ?? null);
+  room.start();
   room.markReady("p1");
   room.markReady("p2");
   return { room, a, b };
@@ -72,10 +84,10 @@ describe("Room — settings", () => {
     seat(room, "p1", "Alice");
     seat(room, "p2", "Bob");
 
-    assert.equal(room.updateSettings("p2", { rated: false }), false);
-    assert.equal(room.settings.rated, true);
-    assert.equal(room.updateSettings("p1", { rated: false }), true);
-    assert.equal(room.settings.rated, false);
+    assert.equal(room.updateSettings("p2", { saturation: false }), false);
+    assert.equal(room.settings.saturation, true);
+    assert.equal(room.updateSettings("p1", { saturation: false }), true);
+    assert.equal(room.settings.saturation, false);
   });
 
   it("merges only the provided fields", () => {
@@ -92,7 +104,7 @@ describe("Room — settings", () => {
 
   it("rejects changes once the match is under way", () => {
     const { room } = playingRoom();
-    assert.equal(room.updateSettings("p1", { rated: false }), false);
+    assert.equal(room.updateSettings("p1", { saturation: false }), false);
   });
 });
 
@@ -229,7 +241,7 @@ describe("Room — winning", () => {
   });
 
   it("reports an ELO change for both players when both accounts are verified", () => {
-    const { room, a } = playingRoom(FAST, VERIFIED);
+    const { room, a } = rankedMatch(VERIFIED);
     const board = boardOf(a.sock);
     for (const tile of A_WINNING_CHAIN) {
       room.attemptClaim("p1", tile, missionFor(board, tile));
@@ -241,10 +253,10 @@ describe("Room — winning", () => {
     assert.ok(changes.p2.delta < 0, "loser should lose rating");
   });
 
-  it("refuses to rate a match with an unauthenticated player", () => {
-    // A session only carries a uuid once Mojang confirmed it, so a guest must not be
-    // able to move anyone's rating — including their opponent's.
-    const { room, a } = playingRoom(FAST, { a: VERIFIED.a, b: null });
+  it("never rates a custom room, however verified both players are", () => {
+    // You choose your own opponent and your own perks there, which is everything a
+    // ladder needs not to be. There is no toggle that can turn this back on.
+    const { room, a } = playingRoom(FAST, VERIFIED);
     const board = boardOf(a.sock);
     for (const tile of A_WINNING_CHAIN) {
       room.attemptClaim("p1", tile, missionFor(board, tile));
@@ -255,8 +267,22 @@ describe("Room — winning", () => {
     assert.deepEqual(ended?.eloChanges, {}, "but nobody's rating moves");
   });
 
-  it("refuses to rate a match played by one account against itself", () => {
-    const { room, a } = playingRoom(FAST, { a: VERIFIED.a, b: VERIFIED.a });
+  it("refuses to rate a ranked match with an unauthenticated player", () => {
+    // A session only carries a uuid once Mojang confirmed it, so a guest must not be
+    // able to move anyone's rating — including their opponent's.
+    const { room, a } = rankedMatch({ a: VERIFIED.a, b: null });
+    const board = boardOf(a.sock);
+    for (const tile of A_WINNING_CHAIN) {
+      room.attemptClaim("p1", tile, missionFor(board, tile));
+    }
+
+    const ended = a.sock.last("match_end");
+    assert.equal(ended?.winner, "A", "the match still resolves normally");
+    assert.deepEqual(ended?.eloChanges, {}, "but nobody's rating moves");
+  });
+
+  it("refuses to rate a ranked match played by one account against itself", () => {
+    const { room, a } = rankedMatch({ a: VERIFIED.a, b: VERIFIED.a });
     const board = boardOf(a.sock);
     for (const tile of A_WINNING_CHAIN) {
       room.attemptClaim("p1", tile, missionFor(board, tile));
@@ -313,14 +339,12 @@ describe("Room — ranked rooms", () => {
 
     assert.equal(room.hostId, null, "a ranked room must never promote a host");
     assert.equal(room.startMatchByHost("p1").reason, "not_host");
-    assert.equal(room.updateSettings("p1", { rated: false }), false);
+    assert.equal(room.updateSettings("p1", { saturation: false }), false);
   });
 
   it("uses the fixed ladder preset, not whatever a custom room defaults to", () => {
     const room = new Room(FAST, "ranked");
-    // `rated` is the load-bearing one: nothing may opt a ranked match out of rating.
-    assert.equal(room.settings.rated, true);
-    assert.equal(room.settings.gameMode, "1v1");
+    assert.deepEqual(room.settings, RANKED_SETTINGS);
   });
 
   it("stays ended after a match instead of reopening for a rematch", () => {

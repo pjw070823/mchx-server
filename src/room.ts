@@ -464,6 +464,7 @@ export class Room {
       board: this.engine.board ?? [],
       claimedLog: this.engine.claimedLog,
       settings: this.settings,
+      origin: this.origin,
       a: all.find((s) => s.side === "A") ?? null,
       b: all.find((s) => s.side === "B") ?? null,
       winnerSide,

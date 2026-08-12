@@ -36,13 +36,20 @@ export const PlayerInfo = z.object({
 });
 export type PlayerInfo = z.infer<typeof PlayerInfo>;
 
+/**
+ * What the players agreed to play.
+ *
+ * Deliberately no `rated` flag: whether a match counts is decided by `room_state.origin`,
+ * not by a toggle. Custom rooms are never rated — you pick your own opponent and your own
+ * perks there — and ranked rooms always are. A boolean that can only ever hold one value
+ * per origin is a second source of truth waiting to disagree with the first.
+ */
 export const RoomSettings = z.object({
   gameMode: z.enum(["1v1", "2v2"]),
   inventorySave: z.boolean(),
   saturation: z.boolean(),
   nightVision: z.boolean(),
   waterBreathing: z.boolean(),
-  rated: z.boolean(),
 });
 export type RoomSettings = z.infer<typeof RoomSettings>;
 
@@ -52,7 +59,6 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   saturation: true,
   nightVision: true,
   waterBreathing: true,
-  rated: true,
 };
 
 /** Mirrors `RoomOrigin` in room-config.ts. Declared here so it can cross the wire. */

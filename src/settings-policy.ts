@@ -32,7 +32,6 @@ export const SETTINGS_POLICY: Policy = {
   saturation: { requiredTier: "free" },
   nightVision: { requiredTier: "free" },
   waterBreathing: { requiredTier: "free" },
-  rated: { requiredTier: "free" },
 };
 
 /**
@@ -44,8 +43,9 @@ export const SETTINGS_POLICY: Policy = {
  * leaderboard positions incomparable — two players at the same rating would have been
  * playing different games.
  *
- * `rated: true` here, plus `Room.updateSettings` refusing outright for ranked rooms,
- * is what makes it impossible for a player to opt a ranked match out of rating.
+ * `Room.updateSettings` refuses outright for ranked rooms, so the ladder plays the same
+ * game every time. Whether a match counts is not in here at all — that follows from the
+ * room's origin.
  */
 export const RANKED_SETTINGS: RoomSettings = {
   gameMode: "1v1",
@@ -53,7 +53,6 @@ export const RANKED_SETTINGS: RoomSettings = {
   saturation: true,
   nightVision: true,
   waterBreathing: true,
-  rated: true,
 };
 
 export interface PatchResult {

@@ -76,12 +76,12 @@ const CLIENT_FIXTURES: ReadonlyArray<{ name: string; json: string; type: string 
   // RoomSettingsPatch: only the toggled field survives explicitNulls=false.
   {
     name: "update_settings single field",
-    json: '{"type":"update_settings","settings":{"rated":false}}',
+    json: '{"type":"update_settings","settings":{"saturation":false}}',
     type: "update_settings",
   },
   {
     name: "update_settings full",
-    json: '{"type":"update_settings","settings":{"gameMode":"1v1","inventorySave":true,"saturation":true,"nightVision":true,"waterBreathing":true,"rated":true}}',
+    json: '{"type":"update_settings","settings":{"gameMode":"1v1","inventorySave":true,"saturation":true,"nightVision":true,"waterBreathing":true}}',
     type: "update_settings",
   },
   { name: "claim", json: '{"type":"claim","tileId":"2,2","missionId":"easy_cookie"}', type: "claim" },
@@ -117,7 +117,7 @@ describe("protocol contract — messages the mod sends", () => {
     // `RoomSettings.partial()` makes fields optional but NOT nullable. If the mod ever
     // turned explicitNulls back on, every settings toggle would start failing
     // validation outright, because the untouched fields would ship as nulls.
-    assert.equal(decode('{"type":"update_settings","settings":{"rated":null}}'), null);
+    assert.equal(decode('{"type":"update_settings","settings":{"saturation":null}}'), null);
     assert.ok(decode('{"type":"update_settings","settings":{}}'), "an empty patch is legal");
   });
 
@@ -310,7 +310,7 @@ describe("protocol contract — messages the server sends", () => {
       settings: DEFAULT_SETTINGS,
     })) as { settings: Record<string, unknown> };
 
-    for (const field of ["gameMode", "inventorySave", "saturation", "nightVision", "waterBreathing", "rated"]) {
+    for (const field of ["gameMode", "inventorySave", "saturation", "nightVision", "waterBreathing"]) {
       assert.ok(field in wire.settings, `settings is missing '${field}'`);
     }
   });

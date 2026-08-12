@@ -6,6 +6,7 @@ import { FAST, FakeWs, fakeConn, muteConsole, VERIFIED } from "./helpers.js";
 
 const { RoomRegistry } = await import("../src/room.js");
 const { Matchmaker, eloWindow, QUEUE_TUNING } = await import("../src/matchmaker.js");
+const { RANKED_SETTINGS } = await import("../src/settings-policy.js");
 const { getOrCreatePlayer, applyMatchResult } = await import("../src/db.js");
 
 let restoreConsole: () => void;
@@ -190,9 +191,9 @@ describe("Matchmaker — pairing", () => {
     const room = h.mm.tick().matched[0]!.room;
 
     assert.equal(room.hostId, null);
-    assert.equal(room.settings.rated, true);
+    assert.deepEqual(room.settings, RANKED_SETTINGS);
     assert.equal(room.startMatchByHost(a.state.playerId).reason, "not_host");
-    assert.equal(room.updateSettings(a.state.playerId, { rated: false }), false);
+    assert.equal(room.updateSettings(a.state.playerId, { saturation: false }), false);
   });
 
   it("tells both players the slot ended because they were matched", () => {
