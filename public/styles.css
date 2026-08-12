@@ -41,16 +41,13 @@ a:hover { color: #7ba0fc; }
 }
 .hdr-brand { display: flex; align-items: center; gap: 9px; color: inherit; }
 .hdr-brand:hover { color: inherit; }
-.hdr-logo {
-  width: 19px; height: 22px;
-  background: linear-gradient(100deg, #4a7bfa, #c77cfa);
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
-}
-.hdr-word { font-weight: 800; font-size: 15px; letter-spacing: 0.16em; }
-.hdr-sub {
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 10px; letter-spacing: 0.14em; color: #5c646f; padding-top: 2px;
-}
+/* 마크 하나로 끝냅니다. 예전에는 여기에 그라디언트 육각형 + HEX + MINECRAFT 가
+   있었는데, 마크 안에 이미 HEX 와 MC 가 적혀 있어 같은 말을 세 번 한 셈이었습니다.
+   폭을 고정하지 않는 이유는 원본 비율(1.146:1)이 height 로부터 따라오게 두기 위함. */
+/* 36px 인 이유: 헤더가 min-height 60 에 상하 패딩 8 이라 44 까지 들어가고, 30 에서는
+   마크 안의 HEX·MC 가 글자가 아니라 무늬로 뭉칩니다. */
+.hdr-logo { height: 36px; width: auto; display: block; }
+.hdr-brand:hover .hdr-logo { opacity: 0.82; }
 
 .hdr-nav { display: flex; gap: 4px; }
 .hdr-nav a {

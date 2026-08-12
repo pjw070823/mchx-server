@@ -192,10 +192,8 @@ function header() {
     : (live ? `${live} LIVE NOW` : "NOTHING LIVE");
   return `
     <div class="hdr">
-      <a class="hdr-brand" href="#/">
-        <span class="hdr-logo"></span>
-        <span class="hdr-word">HEX</span>
-        <span class="hdr-sub">MINECRAFT</span>
+      <a class="hdr-brand" href="#/" aria-label="MINECRAFT HEX">
+        <img class="hdr-logo" src="/logo.png" alt="MINECRAFT HEX" width="41" height="36" />
       </a>
       <nav class="hdr-nav">
         <a href="#/"${on("home") ? ' class="on"' : ""}>${L.nav1}</a>
