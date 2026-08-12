@@ -143,12 +143,13 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   font-family: "JetBrains Mono", "Noto Sans KR", monospace;
   font-size: 11px; letter-spacing: 0.16em; color: #4a7bfa; margin-bottom: 26px;
 }
-.hero h1 { font-size: clamp(38px, 4.4vw, 58px); line-height: 1.05; text-wrap: balance; }
-.hero h1 span { color: #4a7bfa; }
-.hero p {
-  margin: 24px 0 0; max-width: 490px;
-  font-size: 16.5px; line-height: 1.65; color: #98a0ab;
-  word-break: keep-all; text-wrap: pretty;
+/* 헤드라인과 설명 문단이 있던 자리. 마크가 그 둘이 하던 말을 대신합니다.
+   높이만 주고 폭은 비율에 맡깁니다 — 원본이 825×720 이라 1.146:1. */
+.hero-logo {
+  display: block;
+  height: clamp(150px, 21vw, 280px);
+  width: auto;
+  margin: 4px 0 2px;
 }
 .hero-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .hero-stats {

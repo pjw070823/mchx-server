@@ -37,8 +37,6 @@ const T = {
   ko: {
     nav1: "소개", nav3: "중계", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
     eyebrow: "패브릭 모드 · 마인크래프트 26.1.2",
-    h1a: "목표 25개를 두고", h1b: "벌이는 1대1 경주.",
-    heroP: "헥스는 마인크래프트 목표 25개를 5×5 육각 판에 깔고, 두 사람을 같은 시드의 월드에 떨어뜨립니다. 칸에 적힌 목표를 깨면 그 칸이 내 것이 되고, 자기 변에서 반대편 변까지 칸이 끊김 없이 이어지는 순간 판이 끝납니다.",
     ctaWatch: "중계 보러 가기", ctaDl: "모드 내려받기",
     statPool: "전체 목표", statPlayers: "등록 플레이어", statPlayed: "누적 판수",
     rulesKicker: "규칙", rulesH: "목표 25개짜리 판 하나, 먼저 잇는 쪽이 이깁니다.",
@@ -78,8 +76,6 @@ const T = {
   en: {
     nav1: "Overview", nav3: "Live", nav4: "Ranks", nav5: "Install", getMod: "Get the mod",
     eyebrow: "FABRIC CLIENT · MINECRAFT 26.1.2",
-    h1a: "A 1v1 race across", h1b: "twenty-five objectives.",
-    heroP: "Hex deals twenty-five Minecraft objectives onto a 5×5 hex board and drops both players into the same world seed. Finish what a tile says and the tile is yours. The match ends the moment one player's tiles run unbroken from their own edge to the far side.",
     ctaWatch: "Watch a live match", ctaDl: "Get the client mod",
     statPool: "OBJECTIVE POOL", statPlayers: "RATED PLAYERS", statPlayed: "MATCHES PLAYED",
     rulesKicker: "THE RULES", rulesH: "Twenty-five objectives, one board, two edges to link.",
@@ -265,8 +261,7 @@ function pageHome() {
     <div class="hero">
       <div>
         <div class="hero-eyebrow">${L.eyebrow}</div>
-        <h1>${L.h1a}<br /><span>${L.h1b}</span></h1>
-        <p>${L.heroP}</p>
+        <img class="hero-logo" src="/logo.png" alt="MINECRAFT HEX" width="321" height="280" />
         <div class="hero-btns">
           <a class="cta cta-lg" href="#/live">${L.ctaWatch}</a>
           <a class="cta-ghost" href="#/install">${L.ctaDl}</a>
