@@ -129,8 +129,9 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
 
       // 아이콘이 있으면 그림만, 없으면 예전처럼 이름. 아이콘은 한 번에 다 그려지는 게
       // 아니라 몇 개씩 늘어나므로, 섞인 판이 정상 상태입니다.
-      const frames = ICONS[tile.missionId];
-      if (frames) {
+      const icon = ICONS[tile.missionId];
+      if (icon) {
+        const frames = icon.frames;
         // 정사각 창을 뚫고 그 안에서 스트립을 위로 밀어 올립니다. 배경 이미지로 하면
         // 육각형이 세로로 긴 탓에 프레임이 정사각을 잃습니다.
         inner.classList.add("has-mi");
@@ -141,7 +142,8 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
         img.alt = "";
         if (frames > 1) {
           // 모드와 같은 프레임 길이. 두 화면이 같은 속도여야 같은 아이콘으로 보입니다.
-          img.style.animation = `mi-frames ${frames * 0.4}s steps(${frames}) infinite`;
+          // 속도는 아이콘마다 다릅니다 - GIF 로 준 것은 그 GIF 의 프레임 간격을 씁니다.
+          img.style.animation = `mi-frames ${(frames * icon.ms) / 1000}s steps(${frames}) infinite`;
         }
         win.appendChild(img);
         inner.appendChild(win);

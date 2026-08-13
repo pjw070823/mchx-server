@@ -1,38 +1,150 @@
 {
- "easy_age_lock_baby": 1,
- "easy_bed_respawn": 1,
- "easy_boat_with_monster": 1,
- "easy_bookshelf": 1,
- "easy_breed_animal": 1,
- "easy_cookie": 1,
- "easy_crafter_crafter": 1,
- "easy_die_dripstone": 1,
- "easy_die_lava": 1,
- "easy_distinct_chest": 1,
- "easy_dolphins_grace": 1,
- "easy_eight_dyes": 6,
- "easy_ender_pearl": 1,
- "easy_fall_survive_128": 1,
- "easy_five_log_types": 8,
- "easy_glow_sign": 2,
- "easy_iron_ingots": 1,
- "easy_jump_1000": 1,
- "easy_minecart_20_blocks": 1,
- "easy_oak_logs": 1,
- "easy_obsidian": 1,
- "easy_patterned_banner": 1,
- "easy_powered_rails": 1,
- "easy_six_stones": 1,
- "easy_use_lodestone": 1,
- "easy_what_a_deal": 1,
- "medium_axolotl": 1,
- "medium_beetroot_seeds": 1,
- "medium_cake": 1,
- "medium_glowstone": 1,
- "medium_jukebox": 1,
- "medium_magma_cream": 1,
- "medium_suspicious_stew_2": 1,
- "medium_tnt": 1,
- "medium_writable_book": 1,
- "medium_xp_level_20": 1
+ "easy_age_lock_baby": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_bed_respawn": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_boat_with_monster": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_bookshelf": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_breed_animal": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_cookie": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_crafter_crafter": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_die_dripstone": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_die_lava": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_distinct_chest": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_dolphins_grace": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_eight_dyes": {
+  "frames": 6,
+  "ms": 400
+ },
+ "easy_ender_pearl": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_fall_survive_128": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_five_log_types": {
+  "frames": 8,
+  "ms": 400
+ },
+ "easy_glow_sign": {
+  "frames": 2,
+  "ms": 400
+ },
+ "easy_iron_ingots": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_jump_1000": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_minecart_20_blocks": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_oak_logs": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_obsidian": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_patterned_banner": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_powered_rails": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_six_stones": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_use_lodestone": {
+  "frames": 1,
+  "ms": 400
+ },
+ "easy_what_a_deal": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_axolotl": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_beetroot_seeds": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_cake": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_glowstone": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_jeb_sheep": {
+  "frames": 96,
+  "ms": 100
+ },
+ "medium_jukebox": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_magma_cream": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_suspicious_stew_2": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_tnt": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_writable_book": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_xp_level_20": {
+  "frames": 1,
+  "ms": 400
+ }
 }
