@@ -103,6 +103,38 @@
   "frames": 1,
   "ms": 400
  },
+ "hard_dried_ghast": {
+  "frames": 1,
+  "ms": 400
+ },
+ "hard_dyes_14": {
+  "frames": 6,
+  "ms": 400
+ },
+ "hard_enchanted_book": {
+  "frames": 1,
+  "ms": 400
+ },
+ "hard_honey_bottle": {
+  "frames": 1,
+  "ms": 400
+ },
+ "hard_pufferfish": {
+  "frames": 1,
+  "ms": 400
+ },
+ "hard_sea_lantern": {
+  "frames": 1,
+  "ms": 400
+ },
+ "hard_wither_death": {
+  "frames": 1,
+  "ms": 400
+ },
+ "hard_wolf_armor": {
+  "frames": 1,
+  "ms": 400
+ },
  "medium_axolotl": {
   "frames": 1,
   "ms": 400
