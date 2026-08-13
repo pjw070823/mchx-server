@@ -120,61 +120,77 @@ const T = {
 const t = () => T[state.lang];
 
 /**
- * 설치 순서. OS 별로 경로만 다르고 흐름은 같습니다.
+ * 설치 순서, Prism Launcher 기준.
  *
- * 03 이 "실행하면 이렇게 보인다"로 끝나는 이유는, 여기까지 왔는데 안 되는 경우가
- * 대부분 02 를 빠뜨린 것이라서입니다. 04 는 지시가 아니라 안심시키는 항목입니다 —
- * 서버가 낡은 빌드를 막기 때문에, 이 페이지를 다시 찾아올 필요가 없다는 것을
- * 설치 시점에 알려두는 편이 낫습니다.
+ * 이전에는 패브릭 인스톨러를 직접 돌리고 jar 세 개를 mods 폴더에 넣게 했습니다. Prism
+ * 이 그 셋을 다 흡수합니다 — 로더는 인스턴스를 만들 때 고르고, 의존 모드는 런처 안에서
+ * 검색해 받고, 인스턴스는 바닐라 프로필과 분리돼 있어 원래 하던 마인크래프트를 건드리지
+ * 않습니다. 마지막이 특히 중요합니다: 자동 업데이트가 mods 폴더를 직접 고치는데, 그
+ * 폴더가 이 게임 전용이면 잘못될 것이 없습니다.
+ *
+ * OS 탭이 남아 있는 이유는 01 뿐입니다. Prism 을 깔고 나면 화면이 셋 다 같습니다.
  */
 const OS_STEPS = {
   ko: {
     win: [
-      { n: "01", title: "패브릭 로더 설치", body: "패브릭 인스톨러를 실행하고 26.1.2 를 고르면 런처에 프로필이 하나 새로 생깁니다." },
-      { n: "02", title: "의존 모드 두 개 넣기", body: "Fabric API 와 Fabric Language Kotlin 을 mods 폴더에 넣습니다. 둘 중 하나라도 없으면 모드가 로드되지 않습니다.", cmd: "%appdata%\\.minecraft\\mods" },
-      { n: "03", title: "mchx 넣기", body: "같은 폴더에 mchx jar 을 추가합니다. 게임을 켰을 때 HEX 로비가 바로 뜨면 정상입니다." },
-      { n: "04", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다. 다시 켜면 최신입니다. 이 페이지를 다시 찾아오실 필요는 없습니다." },
-      { n: "05", title: "접속할 서버 바꾸기 (선택)", body: "config/mchx.json 의 serverUrl 값만 고칩니다. 파일을 통째로 덮어쓰면 HUD 설정이 기본값으로 돌아갑니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
+      { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 Windows 설치 파일을 받아 실행하고, 처음 켤 때 마인크래프트 계정으로 로그인합니다." },
+      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.1.2 를 고르고, 모드 로더에서 Fabric 을 선택합니다. 이름은 아무거나 좋습니다." },
+      { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 검색해 추가합니다. 둘 중 하나라도 없으면 모드가 로드되지 않습니다." },
+      { n: "04", title: "mchx 넣기", body: "위에서 받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다. 인스턴스 창에 끌어다 놓아도 됩니다." },
+      { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다. 안 뜨면 03 을 다시 확인해 주세요." },
+      { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다. 다시 켜면 최신입니다. 이 페이지를 다시 찾아오실 필요는 없습니다." },
+      { n: "07", title: "접속할 서버 바꾸기 (선택)", body: "인스턴스의 폴더 → config/mchx.json 에서 serverUrl 값만 고칩니다. 파일을 통째로 덮어쓰면 HUD 설정이 기본값으로 돌아갑니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
     ],
     mac: [
-      { n: "01", title: "패브릭 로더 설치", body: "패브릭 인스톨러를 실행하고 26.1.2 를 고릅니다." },
-      { n: "02", title: "의존 모드 두 개 넣기", body: "Fabric API 와 Fabric Language Kotlin 을 mods 폴더에 넣습니다.", cmd: "~/Library/Application Support/minecraft/mods" },
-      { n: "03", title: "mchx 넣기", body: "같은 폴더에 추가합니다. 게임을 켜면 HEX 로비가 바로 뜹니다." },
-      { n: "04", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
-      { n: "05", title: "접속할 서버 바꾸기 (선택)", body: "config/mchx.json 의 serverUrl 값만 고칩니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
+      { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 macOS 빌드를 받아 응용 프로그램에 옮깁니다. 처음 실행이 막히면 우클릭 후 열기를 한 번만 해 주면 됩니다." },
+      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.1.2 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
+      { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 추가합니다." },
+      { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
+      { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
+      { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
+      { n: "07", title: "접속할 서버 바꾸기 (선택)", body: "인스턴스의 폴더 → config/mchx.json 에서 serverUrl 값만 고칩니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
     ],
     linux: [
-      { n: "01", title: "패브릭 로더 설치", body: "터미널로 깔아도 됩니다. 버전만 명시해 주세요.", cmd: "java -jar fabric-installer.jar client -mcversion 26.1.2" },
-      { n: "02", title: "의존 모드 두 개 넣기", body: "Fabric API 와 Fabric Language Kotlin 을 mods 폴더에 넣습니다.", cmd: "~/.minecraft/mods" },
-      { n: "03", title: "mchx 넣기", body: "같은 폴더에 mchx jar 을 추가합니다. 게임을 켜면 HEX 로비가 바로 뜹니다." },
-      { n: "04", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
-      { n: "05", title: "접속할 서버 바꾸기 (선택)", body: "config/mchx.json 의 serverUrl 값만 고칩니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
+      { n: "01", title: "Prism Launcher 설치", body: "배포판 패키지나 Flatpak 으로 깔면 됩니다. AppImage 도 그대로 동작합니다.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
+      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.1.2 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
+      { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 추가합니다." },
+      { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
+      { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
+      { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
+      { n: "07", title: "접속할 서버 바꾸기 (선택)", body: "인스턴스의 폴더 → config/mchx.json 에서 serverUrl 값만 고칩니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
     ],
   },
   en: {
     win: [
-      { n: "01", title: "Install Fabric Loader", body: "Run the Fabric installer and pick Minecraft 26.1.2. It writes a new profile into your launcher." },
-      { n: "02", title: "Drop in both dependencies", body: "Fabric API and Fabric Language Kotlin both go in the mods folder. The mod will not load without them.", cmd: "%appdata%\\.minecraft\\mods" },
-      { n: "03", title: "Add mchx", body: "Put the mchx jar in the same folder. Launch the game and the HEX lobby opens straight away — that is how you know it worked." },
-      { n: "04", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game. Start it again and you are current. You will not need this page twice." },
-      { n: "05", title: "Point at another server (optional)", body: "Change only the serverUrl value in config/mchx.json — replacing the whole file resets your HUD settings to defaults.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
+      { n: "01", title: "Install Prism Launcher", body: "Grab the Windows installer from the official site and sign in with your Minecraft account on first run." },
+      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.1.2, then choose Fabric as the mod loader. Name it whatever you like." },
+      { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — search for Fabric API and Fabric Language Kotlin. The mod will not load without them." },
+      { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above. Dragging it onto the instance works too." },
+      { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away. If it doesn't, check step 03." },
+      { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game. Start it again and you are current. You will not need this page twice." },
+      { n: "07", title: "Point at another server (optional)", body: "Open the instance folder and change only the serverUrl value in config/mchx.json — replacing the whole file resets your HUD settings.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
     ],
     mac: [
-      { n: "01", title: "Install Fabric Loader", body: "Run the Fabric installer and pick Minecraft 26.1.2." },
-      { n: "02", title: "Drop in both dependencies", body: "Fabric API and Fabric Language Kotlin both go in the mods folder.", cmd: "~/Library/Application Support/minecraft/mods" },
-      { n: "03", title: "Add mchx", body: "Same folder. Launch the game and the HEX lobby opens straight away." },
-      { n: "04", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
-      { n: "05", title: "Point at another server (optional)", body: "Change only the serverUrl value in config/mchx.json.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
+      { n: "01", title: "Install Prism Launcher", body: "Download the macOS build and move it to Applications. If Gatekeeper blocks the first run, right-click and Open once." },
+      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.1.2, then choose Fabric as the mod loader." },
+      { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — add Fabric API and Fabric Language Kotlin." },
+      { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
+      { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
+      { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
+      { n: "07", title: "Point at another server (optional)", body: "Open the instance folder and change only the serverUrl value in config/mchx.json.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
     ],
     linux: [
-      { n: "01", title: "Install Fabric Loader", body: "A headless install works fine. Pass the version explicitly.", cmd: "java -jar fabric-installer.jar client -mcversion 26.1.2" },
-      { n: "02", title: "Drop in both dependencies", body: "Fabric API and Fabric Language Kotlin both go in the mods folder.", cmd: "~/.minecraft/mods" },
-      { n: "03", title: "Add mchx", body: "Put the mchx jar in the same folder. Launch the game and the HEX lobby opens straight away." },
-      { n: "04", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
-      { n: "05", title: "Point at another server (optional)", body: "Change only the serverUrl value in config/mchx.json.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
+      { n: "01", title: "Install Prism Launcher", body: "Your distro package or Flatpak both work, as does the AppImage.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
+      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.1.2, then choose Fabric as the mod loader." },
+      { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — add Fabric API and Fabric Language Kotlin." },
+      { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
+      { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
+      { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
+      { n: "07", title: "Point at another server (optional)", body: "Open the instance folder and change only the serverUrl value in config/mchx.json.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
     ],
   },
 };
+
 
 
 /* ------------------------------------------------------------------ 유틸 */
@@ -584,7 +600,7 @@ function pageInstall() {
       <div class="req">
         <div>
           <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.requires}</div>
-          <div class="bd">Minecraft 26.1.2<br />Fabric Loader 0.19+<br />Fabric API<br />Fabric Language Kotlin 1.13+</div>
+          <div class="bd">Prism Launcher<br />Minecraft 26.1.2<br />Fabric API<br />Fabric Language Kotlin 1.13+</div>
         </div>
         <div>
           <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.notRequired}</div>
