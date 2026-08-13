@@ -40,6 +40,14 @@ export class FakeWs {
     this.readyState = 3;
   }
 
+  /** Closes the server initiated, so a test can pin both the code and its timing. */
+  readonly closes: { code?: number; reason?: string }[] = [];
+
+  close(code?: number, reason?: string): void {
+    this.closes.push({ code, reason });
+    this.readyState = 3;
+  }
+
   all(type: string): Frame[] {
     return this.sent.filter((f) => f.type === type);
   }
@@ -119,6 +127,7 @@ export function fakeConn(
     name?: string;
     remoteAddr?: string | null;
     protocolVersion?: number | null;
+    clientVersion?: string | null;
   } = {},
 ): { state: ConnState; sock: FakeWs } {
   const sock = new FakeWs();
@@ -133,6 +142,7 @@ export function fakeConn(
     spectateFailCount: 0,
     spectateBlockedUntil: 0,
     protocolVersion: opts.protocolVersion === undefined ? 2 : opts.protocolVersion,
+    clientVersion: opts.clientVersion ?? null,
     challenge: null,
     verified: uuid ? { uuid, name: opts.name ?? "Player" } : null,
     queueCooldownUntil: 0,

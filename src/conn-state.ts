@@ -26,6 +26,14 @@ export interface ConnState {
   spectateBlockedUntil: number;
   /** Set by `hello`. Null means the client hasn't introduced itself yet. */
   protocolVersion: number | null;
+  /**
+   * The mod build this connection reported, once it passed the version gate.
+   *
+   * Kept so a report of "this match behaved oddly" can be tied to a build without
+   * digging through logs. Null for anything that did not report a comparable version —
+   * spectators, the dev bot.
+   */
+  clientVersion: string | null;
   /** In-flight auth nonce. Replaced by a new `auth_begin`, cleared once used. */
   challenge: AuthChallenge | null;
   /**

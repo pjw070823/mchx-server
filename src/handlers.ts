@@ -7,6 +7,7 @@ import type { Matchmaker } from "./matchmaker.js";
 import { QUEUE_ERROR_TEXT } from "./matchmaker.js";
 import { send, sendError } from "./wire.js";
 import { issueChallenge, verifyChallenge } from "./auth.js";
+import { isTooOld, releaseInfo } from "./release.js";
 
 // Re-exported so existing importers (index.ts, tests) don't care that these moved.
 export type { ConnState } from "./conn-state.js";
@@ -171,6 +172,12 @@ export function handleClose(ws: WebSocket, state: ConnState, deps: ServerDeps): 
 /**
  * Version handshake. A client whose protocol we don't speak is told so and disconnected,
  * rather than being allowed to fail confusingly somewhere later in a match.
+ *
+ * Two gates, in this order, because they fail differently. The protocol gate is about
+ * whether we can hold a conversation at all, so it ends in a plain error. The build gate
+ * is about whether this client can play the game fairly, and it ends in `update_required`
+ * — which carries the download, because that message is the last thing the client will
+ * hear from us and "update" with no "from where" is a dead end.
  */
 function hello(
   ws: WebSocket,
@@ -188,10 +195,27 @@ function hello(
     ws.close(1008, "protocol_mismatch");
     return;
   }
+
+  const build = msg.clientVersion ?? null;
+  if (isTooOld(build)) {
+    console.warn(`[ws] ${state.playerId} build ${build} < required ${releaseInfo().minimum}`);
+    send(ws, { type: "update_required", yourVersion: build, release: releaseInfo() });
+    // Let the message reach the client before the close frame does. `ws.close()` while a
+    // frame is still queued is fine on paper, but the client has to both read it and put
+    // it somewhere its UI can find, and a socket that closes in the same tick has been
+    // enough to lose it in testing.
+    setTimeout(() => ws.close(1008, "update_required"), UPDATE_NOTICE_GRACE_MS);
+    return;
+  }
+
   state.protocolVersion = version;
-  console.log(`[ws] ${state.playerId} hello v${version}${msg.clientVersion ? ` (${msg.clientVersion})` : ""}`);
-  send(ws, { type: "hello_ok", protocolVersion: PROTOCOL_VERSION });
+  state.clientVersion = build;
+  console.log(`[ws] ${state.playerId} hello v${version}${build ? ` (${build})` : ""}`);
+  send(ws, { type: "hello_ok", protocolVersion: PROTOCOL_VERSION, release: releaseInfo() });
 }
+
+/** Long enough for the notice to land, short enough that a refused client is not held. */
+const UPDATE_NOTICE_GRACE_MS = 250;
 
 /**
  * Second half of the account handshake: ask Mojang whether this name joined under the

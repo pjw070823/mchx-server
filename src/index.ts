@@ -158,6 +158,7 @@ wss.on("connection", (ws, req) => {
     spectateFailCount: 0,
     spectateBlockedUntil: 0,
     protocolVersion: null,
+    clientVersion: null,
     challenge: null,
     verified: null,
     queueCooldownUntil: 0,

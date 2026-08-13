@@ -91,6 +91,28 @@ export type ClaimedTile = z.infer<typeof ClaimedTile>;
 export const RoomStatus = z.enum(["waiting", "starting", "playing", "ended"]);
 export type RoomStatus = z.infer<typeof RoomStatus>;
 
+/**
+ * The newest client build, as the server describes it to a client.
+ *
+ * `download` is null when no jar has been published yet — the client then reports the
+ * version difference and stops, rather than offering an update it cannot perform. The
+ * hash travels with the URL on purpose: the mod verifies against this value, so whoever
+ * hosts the file cannot substitute a different one.
+ */
+export const ClientRelease = z.object({
+  version: z.string().min(1).max(64),
+  /** Oldest build allowed to connect. */
+  minimum: z.string().min(1).max(64),
+  download: z
+    .object({
+      url: z.string().url(),
+      sha512: z.string().regex(/^[0-9a-f]{128}$/),
+      sizeBytes: z.number().int().positive(),
+    })
+    .nullable(),
+});
+export type ClientRelease = z.infer<typeof ClientRelease>;
+
 export const ClientMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hello"),
@@ -191,6 +213,28 @@ export const ServerMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hello_ok"),
     protocolVersion: z.number().int(),
+    /**
+     * The newest published client, or null when this server has none to advertise.
+     *
+     * Sent on every successful handshake rather than only when an update is due, so the
+     * client decides what to show. The server knowing "you are two builds behind" and
+     * the client knowing "and I am mid-match" are different halves of that decision.
+     */
+    release: ClientRelease.nullable().optional(),
+  }),
+  /**
+   * Sent instead of `hello_ok` when the client is below the minimum, immediately before
+   * the socket closes.
+   *
+   * It carries the download rather than just a version number because this is the last
+   * message that client will ever receive from us — telling it to update without telling
+   * it where leaves the player with an error and no next step.
+   */
+  z.object({
+    type: z.literal("update_required"),
+    /** What the client reported, echoed so it can show both numbers. */
+    yourVersion: z.string().nullable(),
+    release: ClientRelease,
   }),
   z.object({
     type: z.literal("auth_challenge"),
