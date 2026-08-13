@@ -61,9 +61,9 @@ export interface Download {
 export const DOWNLOAD: Download | null = {
   url: "https://mc-hex.com/downloads/mchx-0.1.6.jar",
   sha512:
-    "3df8212dfc8cc2d0b231f37ec14c1965ada11ad11399345531009e4712af4fdc" +
-    "ad1eb8ca01406cc524cc532764e72e9102be65621454cc7458dc305f5cd84288",
-  sizeBytes: 1400881,
+    "0fd26d8ba889e091ed757c009374ef76e1201f8a88aa03538ccd8b7a54495c90" +
+    "394dc8280ee22d70c5198aade4075f9c770f27b35539bf247906d90612f3e017",
+  sizeBytes: 1420590,
 };
 
 /** What the client is told about the newest build. */
