@@ -25,6 +25,9 @@ const state = {
   // 1-based, per list. Reset on route entry, moved only by the pager.
   pages: { live: 1, replays: 1, ranks: 1 },
   stats: { pool: "—", players: "—", matches: "—" },
+  // 설치 페이지가 광고할 빌드. 서버가 접속을 허용하는 그 값과 같은 곳에서 옵니다 —
+  // 페이지 소스에 버전을 박아두면 사이트와 서버가 서로 다른 빌드를 말하게 됩니다.
+  release: null,
 };
 
 function detectOs() {
@@ -68,8 +71,8 @@ const T = {
     prev: "이전", next: "다음",
     kInstall: "설치", dlH: "클라이언트 모드 내려받기",
     dlP: "모드는 직접 플레이할 때만 필요합니다. 라이브는 아무것도 깔지 않아도 볼 수 있습니다.",
-    relLine: "패브릭 · 마인크래프트 26.1.2 · 아직 공개 배포 전입니다",
-    dlJar: "저장소 보기", changelog: "커밋 기록",
+    relLine: "패브릭 · 마인크래프트 26.1.2",
+    dlJar: "jar 내려받기", changelog: "커밋 기록", dlSize: "MB",
     requires: "필요한 것", notRequired: "필요 없는 것",
     nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "라이브 시청용 설치",
     footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다",
@@ -106,8 +109,8 @@ const T = {
     prev: "Prev", next: "Next",
     kInstall: "INSTALL", dlH: "Get the client mod",
     dlP: "You only need the mod to play. Watching boards on this site needs nothing installed.",
-    relLine: "Fabric · Minecraft 26.1.2 · not published yet",
-    dlJar: "View repository", changelog: "Commits",
+    relLine: "Fabric · Minecraft 26.1.2",
+    dlJar: "Download jar", changelog: "Commits", dlSize: "MB",
     requires: "REQUIRES", notRequired: "NOT REQUIRED",
     nr1: "A server to host", nr2: "A separate account — your Minecraft account signs you in", nr3: "Anything installed to watch",
     stepsTitle: "INSTALL STEPS",
@@ -516,6 +519,13 @@ function pageRanks() {
 
 /* -------------------------------------------------------------- 화면: 설치 */
 
+/** 파일 크기 한 줄. 아직 게시된 jar 이 없으면 아무것도 덧붙이지 않습니다. */
+function dlMeta(L) {
+  const d = state.release?.download;
+  if (!d) return "";
+  return ` · ${(d.sizeBytes / 1048576).toFixed(1)} ${L.dlSize}`;
+}
+
 function pageInstall() {
   const L = t();
   const steps = OS_STEPS[state.lang][state.os];
@@ -526,13 +536,15 @@ function pageInstall() {
       <h2 class="h-lg" style="margin-top:12px">${L.dlH}</h2>
       <p class="dl-hero">${L.dlP}</p>
 
-      <div class="dl-card">
+      <div class="dl-card" id="dlcard">
         <div class="rel">
-          <b>mchx 0.1.1</b>
-          <div class="meta">${L.relLine}</div>
+          <b>mchx ${state.release ? escapeHtml(state.release.version) : "—"}</b>
+          <div class="meta">${L.relLine}${dlMeta(L)}</div>
         </div>
         <div class="dl-btns">
-          <a class="cta cta-lg" href="https://github.com/pjw070823/mchx" target="_blank" rel="noopener">${L.dlJar}</a>
+          ${state.release?.download
+            ? `<a class="cta cta-lg" href="${escapeHtml(state.release.download.url)}">${L.dlJar}</a>`
+            : ""}
           <a class="cta-ghost" href="https://github.com/pjw070823/mchx/commits/master" target="_blank" rel="noopener">${L.changelog}</a>
         </div>
       </div>
@@ -678,6 +690,12 @@ async function route() {
     state.page = "install";
     render(pageInstall());
     wireInstall();
+    // 먼저 그리고 나서 받습니다. 실패해도 설치 단계는 그대로 읽을 수 있고,
+    // 버전 줄만 "—" 로 남습니다.
+    if (!state.release) {
+      state.release = await api("/api/release").catch(() => null);
+      if (state.page === "install") { render(pageInstall()); wireInstall(); }
+    }
     return;
   }
 

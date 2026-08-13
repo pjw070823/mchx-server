@@ -14,6 +14,7 @@ import {
   getRecentMatches,
   searchPlayersByName,
 } from "./db.js";
+import { releaseInfo } from "./release.js";
 
 /** Shape of a Minecraft account id, enforced before anything reaches the database. */
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -35,6 +36,17 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
 
   target.get("/api/missions", (_req, res) => {
     res.json({ version: 1, missions: ALL_MISSIONS });
+  });
+
+  /**
+   * The current client build, for the install page.
+   *
+   * The page used to print a version number typed into its own source, which meant the
+   * site could advertise one build while the server refused everything but another. Both
+   * now read the same constant.
+   */
+  target.get("/api/release", (_req, res) => {
+    res.json(releaseInfo());
   });
 
   target.get("/api/rating/:uuid", (req, res) => {

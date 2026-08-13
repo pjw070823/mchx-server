@@ -49,8 +49,22 @@ export interface Download {
   readonly sizeBytes: number;
 }
 
-/** Null until a real release is published; the mod then only reports, never downloads. */
-export const DOWNLOAD: Download | null = null;
+/**
+ * Null would mean "no published jar" — the mod would then report the version gap and
+ * stop, rather than offering an update it cannot perform.
+ *
+ * The file is committed under `public/downloads/` and served by the same static handler
+ * as the rest of the site, so a release is one commit: jar, hash and version move
+ * together and cannot disagree. Serving it ourselves also means the URL and the hash
+ * come from the same place we already trust for everything else.
+ */
+export const DOWNLOAD: Download | null = {
+  url: "https://mc-hex.com/downloads/mchx-0.1.1.jar",
+  sha512:
+    "85b716df5f7a423d74f7e8333942156f5d89358191bf139d33ac538f048d358f" +
+    "b67ad4b0c01f64722c494183249dc81f9a881c5b36231f5f62f5cc9292e1eb8b",
+  sizeBytes: 1358814,
+};
 
 /** What the client is told about the newest build. */
 export interface ReleaseInfo {
