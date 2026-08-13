@@ -563,7 +563,8 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   overflow: hidden; position: relative;
 }
 .hexgrid .hcell > i .mi img {
-  position: absolute; inset: 0;
+  /* 크기는 snapIcons() 가 정수 픽셀로 덮어씁니다. 여기 값은 그 전 한 프레임용입니다. */
+  position: absolute; top: 0; left: 0;
   width: 100%; height: auto; display: block;
   image-rendering: pixelated;
 }

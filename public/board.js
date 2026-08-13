@@ -107,6 +107,9 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
   const stack = document.createElement("div");
   grid.appendChild(stack);
 
+  /** 레이아웃이 끝난 뒤 정수 픽셀로 맞출 아이콘들. 아래 snapIcons 를 보세요. */
+  const iconImgs = [];
+
   rowKeys.forEach((k, idx) => {
     const row = document.createElement("div");
     row.className = "hrow";
@@ -140,6 +143,7 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
         const img = document.createElement("img");
         img.src = `/mission-icons/${tile.missionId}.png`;
         img.alt = "";
+        img.dataset.frames = String(frames);
         if (frames > 1) {
           // 모드와 같은 프레임 길이. 두 화면이 같은 속도여야 같은 아이콘으로 보입니다.
           // 속도는 아이콘마다 다릅니다 - GIF 로 준 것은 그 GIF 의 프레임 간격을 씁니다.
@@ -148,6 +152,7 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
         win.appendChild(img);
         inner.appendChild(win);
         inner.title = name;
+        iconImgs.push(img);
       } else {
         inner.textContent = name;
       }
@@ -160,6 +165,49 @@ export function renderBoard(holder, { board, claimed, missions, selected, onSele
   });
 
   holder.appendChild(grid);
+  watchIcons(iconImgs);
+}
+
+/** 지금 화면에 있는 아이콘들. 칸 크기가 바뀔 때마다 다시 재야 합니다. */
+let snapped = [];
+
+/**
+ * 칸이 커지거나 작아지면 다시 못박습니다.
+ *
+ * `resize` 이벤트로는 부족합니다. 판이 숨은 탭에서 그려지면 그때 잰 너비가 0 이라
+ * 아무것도 못박지 못하고, 탭이 켜지는 순간에는 창 크기가 바뀌지 않아 이벤트도 안 옵니다.
+ * 칸 자체를 지켜보면 두 경우가 같은 한 가지 일이 됩니다.
+ */
+const snapWatch = new ResizeObserver(() => snapIcons(snapped));
+
+/**
+ * 스트립을 정수 픽셀 크기로 못박습니다.
+ *
+ * 칸 너비가 `clamp()` 에서 나오므로 창은 63.36px 같은 소수입니다. 그러면 `steps()` 가
+ * 멈추는 자리도 -63.36, -126.72 … 처럼 소수가 되고, 프레임마다 픽셀 격자와 어긋나는
+ * 양이 달라집니다(-0.36, +0.28, -0.08 …). `image-rendering: pixelated` 가 그 차이를
+ * 이웃 픽셀로 스냅하기 때문에, 그림이 프레임마다 1px 씩 위아래로 떨려 보입니다.
+ *
+ * 이미지 자체를 정수 크기로 두면 `translateY(-100%)` 도 정수가 되고, 그걸 N 등분한
+ * 자리도 전부 정수가 됩니다. 창이 여전히 소수라 반 픽셀쯤 남지만, 그 어긋남은 모든
+ * 프레임에서 똑같기 때문에 그림이 움직이지 않습니다 — 떨림은 크기가 아니라 차이입니다.
+ */
+function snapIcons(imgs) {
+  for (const img of imgs) {
+    const side = Math.round(img.parentElement.getBoundingClientRect().width);
+    if (!side) continue;
+    const frames = Number(img.dataset.frames) || 1;
+    img.style.width = `${side}px`;
+    img.style.height = `${side * frames}px`;
+  }
+}
+
+/** 판을 새로 그린 뒤 한 번. 아이콘이 없는 판이면 감시도 필요 없습니다. */
+function watchIcons(imgs) {
+  snapWatch.disconnect();
+  snapped = imgs;
+  snapIcons(imgs);
+  if (imgs.length) snapWatch.observe(imgs[0].parentElement);
 }
 
 /* ------------------------------------------------- 관전·리플레이 공통 골격 */

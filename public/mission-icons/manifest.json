@@ -120,8 +120,8 @@
   "ms": 400
  },
  "medium_jeb_sheep": {
-  "frames": 96,
-  "ms": 100
+  "frames": 48,
+  "ms": 200
  },
  "medium_jukebox": {
   "frames": 1,
