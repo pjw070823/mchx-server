@@ -129,6 +129,9 @@ const t = () => T[state.lang];
  * 폴더가 이 게임 전용이면 잘못될 것이 없습니다.
  *
  * OS 탭이 남아 있는 이유는 01 뿐입니다. Prism 을 깔고 나면 화면이 셋 다 같습니다.
+ *
+ * 서버 주소를 바꾸는 항목은 없습니다. 공식 서버 말고 다른 곳에 붙는 사람은 자기
+ * 서버를 띄운 사람뿐이고, 그 사람에게는 설치 안내가 필요하지 않습니다.
  */
 const OS_STEPS = {
   ko: {
@@ -139,7 +142,6 @@ const OS_STEPS = {
       { n: "04", title: "mchx 넣기", body: "위에서 받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다. 인스턴스 창에 끌어다 놓아도 됩니다." },
       { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다. 안 뜨면 03 을 다시 확인해 주세요." },
       { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다. 다시 켜면 최신입니다. 이 페이지를 다시 찾아오실 필요는 없습니다." },
-      { n: "07", title: "접속할 서버 바꾸기 (선택)", body: "인스턴스의 폴더 → config/mchx.json 에서 serverUrl 값만 고칩니다. 파일을 통째로 덮어쓰면 HUD 설정이 기본값으로 돌아갑니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
     ],
     mac: [
       { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 macOS 빌드를 받아 응용 프로그램에 옮깁니다. 처음 실행이 막히면 우클릭 후 열기를 한 번만 해 주면 됩니다." },
@@ -148,7 +150,6 @@ const OS_STEPS = {
       { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
       { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
       { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
-      { n: "07", title: "접속할 서버 바꾸기 (선택)", body: "인스턴스의 폴더 → config/mchx.json 에서 serverUrl 값만 고칩니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
     ],
     linux: [
       { n: "01", title: "Prism Launcher 설치", body: "배포판 패키지나 Flatpak 으로 깔면 됩니다. AppImage 도 그대로 동작합니다.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
@@ -157,7 +158,6 @@ const OS_STEPS = {
       { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
       { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
       { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
-      { n: "07", title: "접속할 서버 바꾸기 (선택)", body: "인스턴스의 폴더 → config/mchx.json 에서 serverUrl 값만 고칩니다.", cmd: '"serverUrl": "ws://내서버:8787/ws"' },
     ],
   },
   en: {
@@ -168,7 +168,6 @@ const OS_STEPS = {
       { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above. Dragging it onto the instance works too." },
       { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away. If it doesn't, check step 03." },
       { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game. Start it again and you are current. You will not need this page twice." },
-      { n: "07", title: "Point at another server (optional)", body: "Open the instance folder and change only the serverUrl value in config/mchx.json — replacing the whole file resets your HUD settings.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
     ],
     mac: [
       { n: "01", title: "Install Prism Launcher", body: "Download the macOS build and move it to Applications. If Gatekeeper blocks the first run, right-click and Open once." },
@@ -177,7 +176,6 @@ const OS_STEPS = {
       { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
       { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
       { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
-      { n: "07", title: "Point at another server (optional)", body: "Open the instance folder and change only the serverUrl value in config/mchx.json.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
     ],
     linux: [
       { n: "01", title: "Install Prism Launcher", body: "Your distro package or Flatpak both work, as does the AppImage.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
@@ -186,7 +184,6 @@ const OS_STEPS = {
       { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
       { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
       { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
-      { n: "07", title: "Point at another server (optional)", body: "Open the instance folder and change only the serverUrl value in config/mchx.json.", cmd: '"serverUrl": "ws://your-host:8787/ws"' },
     ],
   },
 };
