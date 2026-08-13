@@ -50,6 +50,14 @@ export const RoomSettings = z.object({
   saturation: z.boolean(),
   nightVision: z.boolean(),
   waterBreathing: z.boolean(),
+  /**
+   * Hand both players an elytra and rockets thirty minutes in.
+   *
+   * A room setting rather than a client one: it changes what the match *is*, so both
+   * players have to be playing the same game. Ranked ignores it — the ladder's rules are
+   * not the host's to pick — and there is no host in a ranked room to pick them.
+   */
+  lateSupplies: z.boolean(),
 });
 export type RoomSettings = z.infer<typeof RoomSettings>;
 
@@ -59,6 +67,7 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   saturation: true,
   nightVision: true,
   waterBreathing: true,
+  lateSupplies: true,
 };
 
 /** Mirrors `RoomOrigin` in room-config.ts. Declared here so it can cross the wire. */

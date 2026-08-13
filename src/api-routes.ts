@@ -11,6 +11,7 @@ import {
   getMatchCount,
   getMatchesByPlayerName,
   getPlayer,
+  getRatingHistory,
   getRecentMatches,
   searchPlayersByName,
 } from "./db.js";
@@ -183,6 +184,28 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
     // Cap the term so a 100KB `?q=` can't tie up the synchronous query.
     if (q.length > 64) return res.status(400).json({ error: "query_too_long" });
     res.json({ players: searchPlayersByName(q, clampInt(req.query.limit, 50, 1, 100)) });
+  });
+
+  /**
+   * A player's rating over time, for the profile graph.
+   *
+   * Separate from `/api/players/:uuid` because it is a different shape and a different
+   * cost: the summary is one row and is asked for often, this is up to a few hundred and
+   * is asked for when a screen opens. The current rating comes along so a player with no
+   * rated matches yet still has a line to draw at.
+   */
+  target.get("/api/players/:uuid/ratings", (req, res) => {
+    if (!UUID_RE.test(req.params.uuid)) return res.status(400).json({ error: "bad_uuid" });
+    const row = getPlayer(req.params.uuid);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    res.json({
+      name: row.name,
+      elo: row.elo,
+      gamesPlayed: row.games_played,
+      wins: row.wins,
+      losses: row.losses,
+      points: getRatingHistory(req.params.uuid, clampInt(req.query.limit, 200, 1, 500)),
+    });
   });
 
   target.get("/api/players/:uuid", (req, res) => {

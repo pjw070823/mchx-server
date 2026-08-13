@@ -161,6 +161,26 @@ const matchesByPlayerStmt: StatementSync = db.prepare(
    WHERE player_a_uuid = ? OR player_b_uuid = ?
    ORDER BY ended_at DESC LIMIT ?`,
 );
+/**
+ * Rating after each rated match, oldest first — the shape a graph wants.
+ *
+ * Rated only: an unrated match leaves the rating untouched, so including it would draw a
+ * flat step that reads as "played and drew" rather than "played for fun". Ordered
+ * ascending here rather than in the caller because a line chart that arrives newest-first
+ * plots the player's history backwards, and that is a bug you only notice if you know
+ * what the shape should be.
+ */
+const ratingHistoryStmt: StatementSync = db.prepare(
+  `SELECT ended_at AS endedAt,
+          CASE WHEN player_a_uuid = ? THEN player_a_elo_after ELSE player_b_elo_after END AS elo
+     FROM matches
+    WHERE (player_a_uuid = ? OR player_b_uuid = ?)
+      AND rated = 1
+      AND (CASE WHEN player_a_uuid = ? THEN player_a_elo_after ELSE player_b_elo_after END) IS NOT NULL
+    ORDER BY ended_at ASC
+    LIMIT ?`,
+);
+
 const matchesAllStmt: StatementSync = db.prepare(
   `SELECT * FROM matches ORDER BY ended_at DESC LIMIT ? OFFSET ?`,
 );
@@ -281,6 +301,16 @@ export function recordMatch(m: NewMatchRow): void {
 
 export function getRecentMatches(uuid: string, limit: number): MatchRow[] {
   return matchesByPlayerStmt.all(uuid, uuid, Math.max(1, Math.min(100, limit))) as unknown as MatchRow[];
+}
+
+export interface RatingPoint {
+  readonly endedAt: number;
+  readonly elo: number;
+}
+
+export function getRatingHistory(uuid: string, limit: number): RatingPoint[] {
+  const lim = Math.max(1, Math.min(500, limit));
+  return ratingHistoryStmt.all(uuid, uuid, uuid, uuid, lim) as unknown as RatingPoint[];
 }
 
 export function getAllMatches(limit: number, offset: number): MatchRow[] {

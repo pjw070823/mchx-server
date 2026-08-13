@@ -37,6 +37,7 @@ export const SETTINGS_POLICY: Policy = {
   saturation: { requiredTier: "free" },
   nightVision: { requiredTier: "free" },
   waterBreathing: { requiredTier: "free" },
+  lateSupplies: { requiredTier: "free" },
 };
 
 /**
@@ -58,6 +59,9 @@ export const RANKED_SETTINGS: RoomSettings = {
   saturation: true,
   nightVision: true,
   waterBreathing: true,
+  // Fixed on for the ladder, like every other ranked setting: two players at the same
+  // rating must have been playing the same game.
+  lateSupplies: true,
 };
 
 export interface PatchResult {
