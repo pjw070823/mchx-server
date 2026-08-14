@@ -513,6 +513,34 @@ export function mountReplay(container, matchId, L, lang) {
     }, REPLAY_STEP_MS);
   }
 
+  /** 한 수 앞뒤로. 자동 재생 중이었다면 손이 우선이므로 멈춥니다. */
+  function stepBy(n) {
+    const total = s.data.claims.length;
+    const next = Math.min(Math.max(s.step + n, 0), total);
+    if (next === s.step && !s.playing) return false;
+    stop();
+    s.step = next;
+    draw();
+    return true;
+  }
+
+  /**
+   * 화살표로 한 수씩 넘깁니다.
+   *
+   * 슬라이더에 초점이 있을 때는 브라우저가 이미 화살표로 값을 바꾸고 `input` 을
+   * 띄우므로, 여기서 또 처리하면 한 번 누를 때 두 수가 넘어갑니다. 그래서 그때는
+   * 손을 뗍니다. `preventDefault` 는 판이 가로로 밀리는 것을 막습니다 — 좁은 화면에서
+   * 보드는 제 안에서 스크롤되는 상자라 화살표가 그쪽으로도 먹습니다.
+   */
+  function onKey(ev) {
+    if (!s.data || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    if (ev.target instanceof HTMLInputElement) return;
+    const n = ev.key === "ArrowRight" ? 1 : ev.key === "ArrowLeft" ? -1 : 0;
+    if (!n) return;
+    ev.preventDefault();
+    stepBy(n);
+  }
+
   /** 지금 step 까지의 점령 목록. 되감기가 있으니 매번 앞에서부터 자릅니다. */
   function claimsNow() {
     return s.data.claims.slice(0, s.step);
@@ -546,6 +574,7 @@ export function mountReplay(container, matchId, L, lang) {
                 aria-label="${s.playing ? L.pause : L.play}">${s.playing ? "❚❚" : "▶"}</button>
         <input class="pb-range" id="pbRange" type="range" min="0" max="${total}" step="1" value="${s.step}" />
         <div class="pb-lbl">${s.step} / ${total}</div>
+        <div class="pb-keys" aria-hidden="true"><kbd>←</kbd><kbd>→</kbd></div>
       </div>
     `;
   }
@@ -618,7 +647,14 @@ export function mountReplay(container, matchId, L, lang) {
     .then(([missions, data]) => { s.missions = missions; s.data = data; draw(); })
     .catch((err) => { s.error = err?.message === "not_found" ? L.replayGone : L.replayFailed; draw(); });
 
-  return () => stop();
+  // draw() 가 매번 innerHTML 을 갈아치우므로 안쪽에 붙이면 계속 새로 달립니다.
+  // 화면 밖 한 번만 달고, 라우터가 이 화면을 떠날 때 정리 함수가 뗍니다.
+  window.addEventListener("keydown", onKey);
+
+  return () => {
+    stop();
+    window.removeEventListener("keydown", onKey);
+  };
 }
 
 async function fetchReplay(id) {
