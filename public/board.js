@@ -566,15 +566,28 @@ export function mountReplay(container, matchId, L, lang) {
     };
   }
 
+  /**
+   * 재생 컨트롤. 앞뒤 버튼이 재생 버튼 양옆에 붙습니다.
+   *
+   * 처음에는 화살표를 `<kbd>` 힌트로만 뒀는데, 눌리게 생긴 것이 안 눌리는 쪽이
+   * 안내가 아예 없는 쪽보다 나빴습니다. 그래서 진짜 버튼입니다 — 라벨에 단축키를
+   * 적어 두어 힌트 역할도 같이 합니다.
+   *
+   * 양 끝에서는 `disabled` 로 둡니다. 눌러도 아무 일이 없는 버튼이 살아 있으면
+   * 판이 멈춘 것인지 버튼이 안 듣는 것인지 구별이 안 됩니다.
+   */
   function controls() {
     const total = s.data.claims.length;
     return `
       <div class="pb">
-        <button class="pb-btn" id="pbPlay" type="button"
+        <button class="pb-btn" id="pbPrev" type="button" title="${L.stepBack}"
+                aria-label="${L.stepBack}"${s.step <= 0 ? " disabled" : ""}>←</button>
+        <button class="pb-btn" id="pbPlay" type="button" title="${s.playing ? L.pause : L.play}"
                 aria-label="${s.playing ? L.pause : L.play}">${s.playing ? "❚❚" : "▶"}</button>
+        <button class="pb-btn" id="pbNext" type="button" title="${L.stepFwd}"
+                aria-label="${L.stepFwd}"${s.step >= total ? " disabled" : ""}>→</button>
         <input class="pb-range" id="pbRange" type="range" min="0" max="${total}" step="1" value="${s.step}" />
         <div class="pb-lbl">${s.step} / ${total}</div>
-        <div class="pb-keys" aria-hidden="true"><kbd>←</kbd><kbd>→</kbd></div>
       </div>
     `;
   }
@@ -606,6 +619,10 @@ export function mountReplay(container, matchId, L, lang) {
     if (s.error) { container.innerHTML = stateLine(s.error); return; }
     if (!s.data) { container.innerHTML = stateLine(L.loading); return; }
 
+    // 컨트롤은 매번 통째로 다시 그려지므로, 방금 쓰고 있던 것이 손에서 사라집니다.
+    // 슬라이더는 드래그가 끊기고, 앞뒤 버튼은 두 번째 Enter 부터 안 먹습니다.
+    const hadFocus = container.contains(document.activeElement) ? document.activeElement.id : null;
+
     const claimed = claimsNow();
     const { a, b } = countSides(claimed);
     const dateLine = new Date(s.data.endedAt).toLocaleDateString(lang === "ko" ? "ko-KR" : "en-GB");
@@ -632,14 +649,21 @@ export function mountReplay(container, matchId, L, lang) {
     });
 
     container.querySelector("#pbPlay")?.addEventListener("click", () => { play(); draw(); });
-    const range = container.querySelector("#pbRange");
-    range?.addEventListener("input", (ev) => {
+    container.querySelector("#pbPrev")?.addEventListener("click", () => stepBy(-1));
+    container.querySelector("#pbNext")?.addEventListener("click", () => stepBy(1));
+    container.querySelector("#pbRange")?.addEventListener("input", (ev) => {
       stop();
       s.step = Number(ev.target.value);
       draw();
-      // 다시 그리면 노브가 사라지므로 초점을 되돌려 드래그가 이어지게 합니다.
-      container.querySelector("#pbRange")?.focus();
     });
+
+    // 끝에 닿아 버튼이 disabled 가 되었으면 초점 갈 곳이 없습니다. 그때는 반대쪽
+    // 버튼으로 넘겨 줍니다 — 끝까지 감았다고 탭 순서 맨 앞으로 튕겨 나가지 않도록.
+    if (hadFocus) {
+      const back = hadFocus === "pbNext" ? "pbPrev" : hadFocus === "pbPrev" ? "pbNext" : null;
+      const el = container.querySelector(`#${hadFocus}`);
+      (el && !el.disabled ? el : back && container.querySelector(`#${back}`))?.focus();
+    }
   }
 
   draw();

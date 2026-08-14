@@ -364,7 +364,9 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 .winner span { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: #bcc9ff; word-break: keep-all; }
 
 /* 재생 컨트롤 — 리플레이에서만 붙습니다. 목업의 보드 아래 막대 그대로입니다. */
-.pb { margin-top: 30px; display: flex; align-items: center; gap: 18px; }
+/* 앞·재생·뒤 세 버튼은 서로 붙고, 슬라이더만 떨어져 나옵니다. 18px 로 고르게
+   벌리면 세 개가 한 벌로 안 읽히고 흩어진 버튼 셋으로 보였습니다. */
+.pb { margin-top: 30px; display: flex; align-items: center; gap: 7px; }
 .pb-btn {
   width: 44px; height: 44px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -372,18 +374,14 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   font-size: 13px; font-weight: 800; color: #e9ecf1;
   transition: border-color 0.12s, color 0.12s;
 }
-.pb-btn:hover { border-color: #4a7bfa; color: #4a7bfa; }
-.pb-range { flex: 1; min-width: 0; accent-color: #4a7bfa; height: 4px; }
+.pb-btn:hover:not(:disabled) { border-color: #4a7bfa; color: #4a7bfa; }
+/* 양 끝에 닿으면 흐려집니다 — 눌러도 안 되는 버튼이 멀쩡해 보이면, 판이 끝난 것인지
+   버튼이 죽은 것인지 알 수가 없습니다. */
+.pb-btn:disabled { border-color: #1e232b; color: #414954; cursor: default; }
+.pb-range { flex: 1; min-width: 0; margin-left: 11px; accent-color: #4a7bfa; height: 4px; }
 .pb-lbl {
   font-family: "JetBrains Mono", "Noto Sans KR", monospace;
   font-size: 12px; color: #8a929e; width: 78px; text-align: right;
-}
-/* 화살표가 먹는다는 것을 알리는 자리. 눌러 보기 전에는 알 수 없는 조작이라 적어 둡니다. */
-.pb-keys { display: flex; gap: 4px; }
-.pb-keys kbd {
-  display: grid; place-items: center; width: 20px; height: 20px;
-  border: 1px solid #262b33; color: #6b7380;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace; font-size: 11px;
 }
 
 .spec-side { flex: 1 1 330px; min-width: 0; background: #0e1116; display: flex; flex-direction: column; }
