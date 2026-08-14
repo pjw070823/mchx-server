@@ -91,6 +91,10 @@
   "frames": 1,
   "ms": 400
  },
+ "easy_self_arrow_hit": {
+  "frames": 1,
+  "ms": 400
+ },
  "easy_six_stones": {
   "frames": 1,
   "ms": 400
@@ -101,6 +105,10 @@
  },
  "easy_what_a_deal": {
   "frames": 1,
+  "ms": 400
+ },
+ "hard_any_potion": {
+  "frames": 6,
   "ms": 400
  },
  "hard_dried_ghast": {
@@ -163,12 +171,24 @@
   "frames": 1,
   "ms": 400
  },
+ "medium_six_pickaxes": {
+  "frames": 6,
+  "ms": 400
+ },
  "medium_suspicious_stew_2": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_three_lanterns": {
   "frames": 1,
   "ms": 400
  },
  "medium_tnt": {
   "frames": 1,
+  "ms": 400
+ },
+ "medium_two_egg_variants": {
+  "frames": 3,
   "ms": 400
  },
  "medium_writable_book": {
