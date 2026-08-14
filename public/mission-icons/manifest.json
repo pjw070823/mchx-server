@@ -143,6 +143,10 @@
   "frames": 1,
   "ms": 400
  },
+ "medium_armor_stand_full": {
+  "frames": 1,
+  "ms": 400
+ },
  "medium_axolotl": {
   "frames": 1,
   "ms": 400
@@ -152,6 +156,10 @@
   "ms": 400
  },
  "medium_cake": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_cat_tamed": {
   "frames": 1,
   "ms": 400
  },
@@ -167,7 +175,19 @@
   "frames": 1,
   "ms": 400
  },
+ "medium_light_as_rabbit": {
+  "frames": 1,
+  "ms": 400
+ },
  "medium_magma_cream": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_noteblock_tweb": {
+  "frames": 1,
+  "ms": 400
+ },
+ "medium_return_to_sender": {
   "frames": 1,
   "ms": 400
  },
