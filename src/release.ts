@@ -19,7 +19,7 @@
  */
 
 /** Newest published build. Clients below this are offered the update. */
-export const LATEST = "0.1.13";
+export const LATEST = "0.1.14";
 
 /**
  * Oldest build allowed to connect. Clients below this are refused.
@@ -29,7 +29,7 @@ export const LATEST = "0.1.13";
  * tolerable costs more than it saves. Lower it to leave a grace window for a release
  * that changed nothing a client depends on.
  */
-export const MINIMUM = "0.1.1";  // 0.1.13 published; the floor moves in its own deploy
+export const MINIMUM = "0.1.1";  // 0.1.14 published; the floor moves in its own deploy
 
 /**
  * Where the jar comes from, and what it must hash to.
@@ -59,11 +59,11 @@ export interface Download {
  * come from the same place we already trust for everything else.
  */
 export const DOWNLOAD: Download | null = {
-  url: "https://mc-hex.com/downloads/mchx-0.1.13.jar",
+  url: "https://mc-hex.com/downloads/mchx-0.1.14.jar",
   sha512:
-    "6ba599509802aff951d2f8cba1bb7e11d5d24688d6289913f166912642a8087e" +
-    "e19459c98bb3946e94fc93df19a5d402e9afd0f2f33b1d0cc4d89db5e3e2c810",
-  sizeBytes: 1514492,
+    "3819964913c13203999e0193f33af69bda9f76fdd617c823fd8b83dc5593ccdf" +
+    "0a87b98025cc4681e23d45c96113a666e02c7958205f4908b73f09e9fc2ee1ce",
+  sizeBytes: 1550454,
 };
 
 /** What the client is told about the newest build. */
