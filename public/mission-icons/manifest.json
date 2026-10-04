@@ -183,6 +183,10 @@
   "frames": 1,
   "ms": 400
  },
+ "medium_nether_y_120": {
+  "frames": 1,
+  "ms": 400
+ },
  "medium_noteblock_tweb": {
   "frames": 1,
   "ms": 400
@@ -193,6 +197,10 @@
  },
  "medium_six_pickaxes": {
   "frames": 6,
+  "ms": 400
+ },
+ "medium_sneak_100": {
+  "frames": 1,
   "ms": 400
  },
  "medium_suspicious_stew_2": {
