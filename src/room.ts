@@ -320,6 +320,9 @@ export class Room {
     this.spectators.add(ws);
     this.sendRoomState(ws, null);
     if (this.status === "playing" || this.status === "ended") this.sendMatchSnapshot(ws, null);
+    // Someone who starts watching mid-match missed the broadcast that says when play
+    // opened, and without it their clock can only count from when the host pressed start.
+    if (this.status === "playing") this.sendCountdownIfArmed(ws);
     return true;
   }
 
@@ -434,7 +437,21 @@ export class Room {
     const startsAt = this.engine.markReady(playerId, this.players.size);
     if (startsAt === null) return;
     this.clearReadyTimeout();
-    this.bus.toEveryone({ type: "countdown_start", startsAt });
+    this.bus.toEveryone({ type: "countdown_start", startsAt, serverNow: Date.now() });
+  }
+
+  /**
+   * Tell one socket when play opens, if that has been decided.
+   *
+   * `countdown_start` is broadcast exactly once, to whoever is connected at that instant.
+   * A player who was mid-reconnect and a spectator who arrived later both missed it, and
+   * for the player that was fatal: their client sat on the waiting screen for a countdown
+   * that had already come and gone.
+   */
+  private sendCountdownIfArmed(ws: WebSocket): void {
+    const startsAt = this.engine.playOpensAt;
+    if (startsAt === null) return;
+    this.bus.send(ws, { type: "countdown_start", startsAt, serverNow: Date.now() });
   }
 
   attemptClaim(playerId: string, tileId: TileId, missionId: string): void {
@@ -499,6 +516,7 @@ export class Room {
       claimedLog: this.engine.claimedLog,
       settings: this.settings,
       origin: this.origin,
+      playOpened: this.engine.isArmed,
       a: all.find((s) => s.side === "A") ?? null,
       b: all.find((s) => s.side === "B") ?? null,
       winnerSide,
@@ -534,6 +552,7 @@ export class Room {
     if (this.status === "playing" || this.status === "ended") {
       this.sendMatchSnapshot(session.ws, session);
     }
+    if (this.status === "playing") this.sendCountdownIfArmed(session.ws);
   }
 
   broadcastChat(playerId: string, text: string): void {

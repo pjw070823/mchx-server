@@ -13,6 +13,8 @@ export interface SettlementInput {
   readonly settings: RoomSettings;
   /** Only a `ranked` room can move ratings. See [resolveRated]. */
   readonly origin: RoomOrigin;
+  /** Whether the countdown was ever armed — both worlds loaded and play could begin. */
+  readonly playOpened: boolean;
   /** Side A's session, even if they have already been removed from the room. */
   readonly a: PlayerSession | null;
   readonly b: PlayerSession | null;
@@ -104,8 +106,13 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
  * your perks, which is everything a ladder needs to not be. That used to be a per-room
  * toggle, which meant the answer lived in two places.
  *
- * Beyond that, three ways to lose the right:
+ * Beyond that, four ways to lose the right:
  *
+ *  - **Never started, and nobody won.** When neither world loads in time the match ends
+ *    with no winner before play ever opened. Scoring that as a draw moved both ratings:
+ *    the higher-rated player lost points for a game that did not happen. A match that
+ *    ends before play opens *with* a winner still counts — one side was ready, the other
+ *    never showed, and that is a forfeit.
  *  - **Unauthenticated.** A session only carries a uuid if Mojang confirmed the account,
  *    so a null uuid means we do not know who this was. Rating an anonymous player would
  *    put the ladder back where it started: anyone able to claim any identity.
@@ -116,6 +123,9 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
 function resolveRated(input: SettlementInput): { rated: boolean; unratedReason: string | null } {
   const { a, b, origin } = input;
   if (origin !== "ranked") return { rated: false, unratedReason: null };
+  if (!input.playOpened && input.winnerSide === null) {
+    return { rated: false, unratedReason: "never_started" };
+  }
   if (!a || !b) return { rated: false, unratedReason: "incomplete" };
   if (!a.uuid || !b.uuid) return { rated: false, unratedReason: "unauthenticated" };
   if (a.uuid === b.uuid) return { rated: false, unratedReason: "same_uuid" };

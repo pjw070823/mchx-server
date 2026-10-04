@@ -169,7 +169,9 @@
           "minecraft:dark_oak_log",
           "minecraft:mangrove_log",
           "minecraft:cherry_log",
-          "minecraft:pale_oak_log"
+          "minecraft:pale_oak_log",
+          "minecraft:crimson_stem",
+          "minecraft:warped_stem"
         ]
       }
     },
@@ -334,7 +336,7 @@
       "id": "medium_ancient_debris",
       "displayName": "소중한 잔해",
       "difficulty": "medium",
-      "detector": { "type": "advancement", "id": "minecraft:nether/obtain_ancient_debris" }
+      "detector": { "type": "advancement", "id": "minecraft:adventure/salvage_sherd" }
     },
     {
       "id": "medium_xp_level_20",

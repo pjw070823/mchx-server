@@ -293,6 +293,19 @@ export const ServerMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("countdown_start"),
     startsAt: z.number().int(),
+    /**
+     * This server's clock at the moment the frame was sent.
+     *
+     * `startsAt` is an instant on OUR clock, and a client used to compare it against its
+     * own — so a PC running five seconds fast opened play five seconds early, and one
+     * running slow sat on the countdown for as long as it was behind. With this alongside,
+     * the client reads the pair as "play opens `startsAt - serverNow` from now" and never
+     * has to agree with us about what time it is.
+     *
+     * Optional so an older server's frame still parses; a client that gets none falls
+     * back to trusting its own clock, which is what it did before.
+     */
+    serverNow: z.number().int().optional(),
   }),
   z.object({
     type: z.literal("tile_claimed"),

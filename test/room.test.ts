@@ -198,6 +198,26 @@ describe("Room — starting a match", () => {
     assert.equal(a.sock.all("countdown_start").length, 1);
     assert.equal(b.sock.all("countdown_start").length, 1);
   });
+
+  it("stamps the countdown with the server's own clock", () => {
+    // The client turns the pair into "play opens N ms from now". Without `serverNow` it
+    // can only compare `startsAt` against its own clock, and a PC running fast starts early.
+    const { a } = playingRoom();
+    const frame = a.sock.last("countdown_start");
+    assert.equal(typeof frame?.serverNow, "number");
+    assert.ok((frame!.startsAt as number) >= (frame!.serverNow as number));
+  });
+
+  it("tells a spectator who arrives mid-match when play opened", () => {
+    const { room } = playingRoom();
+    const watcher = new FakeWs();
+    assert.ok(room.addSpectator(watcher.ws));
+    assert.ok(watcher.last("countdown_start"), "otherwise their clock counts from the start button");
+    assert.ok(
+      watcher.indexOf("match_start") < watcher.indexOf("countdown_start"),
+      "the page resets its clock on match_start, so the countdown has to come after it",
+    );
+  });
 });
 
 describe("Room — claims", () => {
@@ -463,6 +483,9 @@ describe("Room — world_ready deadline", () => {
         const ended = a.sock.last("match_end");
         assert.ok(ended);
         assert.equal(ended.winner, null);
+        // Nor does it cost anyone rating. Scored as a draw, the higher-rated player
+        // lost points for a match that never began.
+        assert.deepEqual(ended.eloChanges, {});
         resolve();
       }, 60);
     });
@@ -589,11 +612,31 @@ describe("Room — leaving and disconnects", () => {
 
     assert.equal(room.hasPendingReconnect(), false);
     assert.ok(fresh.last("match_start"), "reconnecting player gets the board back");
+    assert.ok(fresh.last("countdown_start"), "and is told when play opened");
 
     // Past the grace window the cancelled timer must stay cancelled.
     await new Promise((r) => setTimeout(r, 40));
     assert.equal(room.status, "playing");
     assert.equal(b.sock.all("match_end").length, 0);
+  });
+
+  it("re-sends a countdown that was broadcast while the player was away", () => {
+    // The broadcast goes out once, to open sockets only. A player who dropped while their
+    // world was loading came back to a match already under way and never heard it start.
+    const room = new Room(FAST);
+    const a = seat(room, "p1", "Alice", "uuid-alice");
+    seat(room, "p2", "Bob", "uuid-bob");
+    room.startMatchByHost("p1");
+    room.markReady("p1");
+    a.sock.drop();
+    room.removePlayer("p1");
+    room.markReady("p2");
+    assert.equal(a.sock.all("countdown_start").length, 0, "the dead socket heard nothing");
+
+    const fresh = new FakeWs();
+    assert.ok(room.reconnectPlayer("p1", fresh.ws, null));
+    room.sendReconnectSnapshot("p1");
+    assert.ok(fresh.last("countdown_start"));
   });
 
   it("forfeits to the opponent when the grace window expires", async () => {

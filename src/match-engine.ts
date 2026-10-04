@@ -62,6 +62,11 @@ export class MatchEngine {
     return this.activeAt !== null;
   }
 
+  /** The instant play opens, or null while the countdown has not been armed. */
+  get playOpensAt(): number | null {
+    return this.activeAt;
+  }
+
   /**
    * Record that a player's world has finished loading. Once everyone has reported in,
    * arm the countdown and return the instant play begins; null while still waiting.

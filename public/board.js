@@ -334,6 +334,10 @@ export function mountSpectator(container, roomCode, L, lang) {
     claimed: [],
     status: "waiting",
     startedAt: null,
+    /** 카운트다운이 끝나 실제로 플레이가 열린 시각(서버 시계). 아직 모르면 null. */
+    playAt: null,
+    /** 서버 시계 − 이 브라우저 시계. 시청자의 PC 시계가 틀려도 경과 시간은 맞게 나옵니다. */
+    clockOffset: 0,
     players: { A: null, B: null },
     selected: null,
     conn: "",
@@ -347,9 +351,17 @@ export function mountSpectator(container, roomCode, L, lang) {
   const nameOf = (side) => s.players[side]?.name ?? "—";
   const eloOf = (side) => (s.players[side]?.elo != null ? `${s.players[side].elo} ELO · ` : "");
 
+  /**
+   * 인게임 타이머와 같은 기준으로 셉니다 — 시작 버튼이 아니라 카운트다운이 끝난 순간부터.
+   *
+   * 전에는 `match_start.startsAt`(호스트가 시작을 누른 시각)부터 셌는데, 그 사이에는 두
+   * 사람의 월드 생성과 카운트다운이 끼어 있어 관전 시계가 인게임보다 그만큼 앞서 갔습니다.
+   * `countdown_start` 를 아직 못 받았다면 플레이가 열리지 않은 것이므로 시계도 돌지 않습니다.
+   */
   function clockText() {
-    if (!s.startedAt || s.status !== "playing") return "--:--";
-    return mmss(Date.now() - s.startedAt);
+    if (s.status !== "playing") return "--:--";
+    if (s.playAt == null) return "--:--";
+    return mmss(Math.max(0, Date.now() + s.clockOffset - s.playAt));
   }
 
   function draw() {
@@ -416,7 +428,16 @@ export function mountSpectator(container, roomCode, L, lang) {
         s.board = msg.board;
         s.claimed = msg.claimed ?? [];
         s.startedAt = msg.startsAt;
+        s.playAt = null;
         s.winner = null;
+        // 로그는 이 매치의 것만. 리매치 때 지우지 않으면 지난 판의 점령이 그대로 남고,
+        // 중간에 들어온 관전자는 반대로 이미 놓인 수가 하나도 안 보였습니다.
+        s.log = [];
+        for (const c of [...s.claimed].sort((x, y) => (x.claimedAt ?? 0) - (y.claimedAt ?? 0))) pushLog(c);
+        draw(); return;
+      case "countdown_start":
+        s.playAt = msg.startsAt;
+        if (typeof msg.serverNow === "number") s.clockOffset = msg.serverNow - Date.now();
         draw(); return;
       case "tile_claimed":
         s.claimed = s.claimed.filter((c) => c.tileId !== msg.tileId);
