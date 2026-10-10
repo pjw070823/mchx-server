@@ -74,6 +74,15 @@ export class Room {
   /** Fires if the clients never both report `world_ready`. See [beginMatch]. */
   private readyTimer: NodeJS.Timeout | null = null;
 
+  /**
+   * Whether the match under way was started by one player on their own.
+   *
+   * Decided once, when the match begins, from who was seated at that instant. It cannot
+   * be re-derived later from the head count: a two-player match that one side leaves is
+   * also down to one seat, and that is a forfeit with a winner, not a solo run.
+   */
+  private solo = false;
+
   constructor(config: Partial<RoomConfig> = {}, origin: RoomOrigin = "custom") {
     this.code = newRoomCode();
     this.origin = origin;
@@ -273,7 +282,10 @@ export class Room {
     const quitter = this.players.get(playerId);
     if (!quitter || !quitter.side) return false;
 
-    const winner: Side = quitter.side === "A" ? "B" : "A";
+    // Conceding hands the match to the other side — when there is one. A solo run has
+    // nobody to hand it to, and naming the empty side the winner would put a result in
+    // the archive that says an absent player won.
+    const winner: Side | null = this.solo ? null : quitter.side === "A" ? "B" : "A";
     this.endMatch(winner, "forfeit", null);
     return true;
   }
@@ -366,9 +378,21 @@ export class Room {
 
   startMatchByHost(playerId: string): { ok: boolean; reason?: string } {
     if (this.origin !== "custom" || this.hostId !== playerId) return { ok: false, reason: "not_host" };
-    if (!this.isReadyToStart()) return { ok: false, reason: "not_ready" };
+    if (!this.isReadyToStart() && !this.canStartSolo()) return { ok: false, reason: "not_ready" };
     this.beginMatch();
     return { ok: true };
+  }
+
+  /**
+   * A custom room with exactly one player in it may start: that is a solo run.
+   *
+   * Reached only through [startMatchByHost], which has already established that this is
+   * a custom room and the caller is its host. The matchmaker's [start] does not come
+   * through here, so a ranked room still needs both of its players.
+   */
+  private canStartSolo(): boolean {
+    if (this.status !== "waiting" && this.status !== "ended") return false;
+    return this.players.size === 1;
   }
 
   /**
@@ -384,6 +408,7 @@ export class Room {
   private beginMatch(): void {
     this.engine.begin();
     this.status = "playing";
+    this.solo = this.players.size === 1;
     this.matchSettled = false;
     this.endedAt = null;
     // Clear per-match session state so gates and grace timers don't carry over.

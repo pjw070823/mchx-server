@@ -159,14 +159,19 @@ describe("Room — settings", () => {
 });
 
 describe("Room — starting a match", () => {
-  it("refuses a non-host and an under-filled room", () => {
+  it("refuses a non-host", () => {
     const room = new Room(FAST);
     seat(room, "p1", "Alice");
-    assert.deepEqual(room.startMatchByHost("p1"), { ok: false, reason: "not_ready" });
-
     seat(room, "p2", "Bob");
     assert.deepEqual(room.startMatchByHost("p2"), { ok: false, reason: "not_host" });
     assert.deepEqual(room.startMatchByHost("p1"), { ok: true });
+  });
+
+  it("does not let the matchmaker start a ranked room with one player", () => {
+    // Solo is a custom-room thing. The ladder pairs two accounts or nothing.
+    const room = new Room(FAST, "ranked");
+    seat(room, "p1", "Alice", VERIFIED.a);
+    assert.deepEqual(room.start(), { ok: false, reason: "not_ready" });
   });
 
   it("sends both players a 25-tile board and flips to playing", () => {
@@ -453,6 +458,80 @@ describe("Room — ranked rooms", () => {
   it("reports its origin in the public summary", () => {
     assert.equal(new Room(FAST, "ranked").summary().origin, "ranked");
     assert.equal(new Room(FAST).summary().origin, "custom");
+  });
+});
+
+/**
+ * Solo: a custom room started with one player in it.
+ *
+ * Nothing is asked for — there is no solo flag on `start_match`. A host who presses start
+ * alone gets a match with no opponent, and everything else about it is an ordinary match.
+ */
+describe("Room — solo", () => {
+  function soloRoom() {
+    const room = new Room(FAST);
+    const a = seat(room, "p1", "Alice");
+    assert.deepEqual(room.startMatchByHost("p1"), { ok: true });
+    room.markReady("p1");
+    return { room, a };
+  }
+
+  function winAsA(room: InstanceType<typeof Room>, sock: FakeWs) {
+    const board = boardOf(sock);
+    for (const tile of A_WINNING_CHAIN) room.attemptClaim("p1", tile, missionFor(board, tile));
+  }
+
+  it("starts with one player and arms the countdown on their ready alone", () => {
+    const { room, a } = soloRoom();
+    assert.equal(room.status, "playing");
+    assert.ok(a.sock.last("match_start"));
+    assert.equal(a.sock.all("countdown_start").length, 1, "there is nobody else to wait for");
+  });
+
+  it("ends when the player joins their two edges, like any match", () => {
+    const { room, a } = soloRoom();
+    winAsA(room, a.sock);
+    const ended = a.sock.last("match_end");
+    assert.equal(ended?.winner, "A");
+    assert.equal(ended?.reason, "connection");
+    assert.deepEqual(ended?.eloChanges, {});
+    assert.equal(room.status, "waiting", "and the room is there to be played again");
+  });
+
+  it("records no winner when the player gives up", () => {
+    // The other side is empty. Awarding it the match would archive a win for nobody.
+    const { room, a } = soloRoom();
+    assert.equal(room.forfeitMatch("p1"), true);
+    const ended = a.sock.last("match_end");
+    assert.equal(ended?.winner, null);
+    assert.equal(ended?.reason, "forfeit");
+  });
+
+  it("keeps a second player out until the run is over", () => {
+    const { room, a } = soloRoom();
+    assert.equal(seat(room, "p2", "Bob").session, null);
+    winAsA(room, a.sock);
+    assert.ok(seat(room, "p2", "Bob").session, "the room is joinable again afterwards");
+  });
+
+  it("is not what a two-player match becomes when one side concedes", () => {
+    // `solo` is fixed at the start. Deriving it from the head count would have this
+    // forfeit — one seat left, by then — end with no winner.
+    const { room, a, b } = playingRoom();
+    assert.equal(room.forfeitMatch("p2"), true);
+    assert.equal(a.sock.last("match_end")?.winner, "A");
+    assert.ok(b.sock.last("match_end"));
+  });
+
+  it("forgets it was solo once a second player joins for the next match", () => {
+    const { room, a } = soloRoom();
+    winAsA(room, a.sock);
+    const b = seat(room, "p2", "Bob");
+    assert.deepEqual(room.startMatchByHost("p1"), { ok: true });
+    room.markReady("p1");
+    room.markReady("p2");
+    assert.equal(room.forfeitMatch("p1"), true);
+    assert.equal(b.sock.last("match_end")?.winner, "B");
   });
 });
 

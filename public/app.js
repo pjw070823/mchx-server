@@ -343,7 +343,8 @@ function matchRow(room) {
 
   const side = (p, cls) => p
     ? `<div class="row-p"><span class="dot ${cls}"></span><span class="nm">${escapeHtml(p.name ?? "")}</span><span class="el">${p.elo ?? "—"}</span></div>`
-    : `<div class="row-p"><span class="dot ${cls}" style="opacity:.35"></span><span class="el">${L.waiting}</span></div>`;
+    // 진행 중인데 자리가 비어 있으면 솔로입니다. "대기 중"이라고 쓰면 올 사람이 있는 것처럼 읽힙니다.
+    : `<div class="row-p"><span class="dot ${cls}" style="opacity:.35"></span><span class="el">${playing ? "—" : L.waiting}</span></div>`;
 
   return `
     <a class="row" href="#/board/${encodeURIComponent(room.code)}">
