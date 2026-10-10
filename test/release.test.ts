@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { compareVersions, isComparable, isOutdated, isTooOld, LATEST, MINIMUM } from "../src/release.js";
+import {
+  compareVersions, isComparable, isOnOldMinecraft, isOutdated, isTooOld,
+  LATEST, MINECRAFT_FLOOR, MINIMUM,
+} from "../src/release.js";
 
 describe("compareVersions", () => {
   it("orders by numeric component, not lexically", () => {
@@ -75,6 +78,20 @@ describe("the version gates", () => {
     // A developer running an unreleased jar should not be told to downgrade.
     assert.equal(isOutdated("99.0.0"), false);
     assert.equal(isTooOld("99.0.0"), false);
+  });
+
+  it("draws the Minecraft line where the first build for it is", () => {
+    assert.equal(isOnOldMinecraft("0.1.15"), true);
+    assert.equal(isOnOldMinecraft(MINECRAFT_FLOOR), false);
+    assert.equal(isOnOldMinecraft("unknown"), false, "the dev bot and unreadable builds pass");
+  });
+
+  it("keeps MINECRAFT_FLOOR at or below LATEST", () => {
+    // Above it, the build being shipped would be told to reinstall itself.
+    assert.ok(
+      compareVersions(MINECRAFT_FLOOR, LATEST) <= 0,
+      `MINECRAFT_FLOOR ${MINECRAFT_FLOOR} > LATEST ${LATEST}`,
+    );
   });
 
   it("keeps MINIMUM at or below LATEST", () => {

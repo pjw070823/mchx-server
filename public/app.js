@@ -72,7 +72,7 @@ const T = {
     prev: "이전", next: "다음",
     kInstall: "설치", dlH: "클라이언트 모드 내려받기",
     dlP: "모드는 직접 플레이할 때만 필요합니다. 라이브는 아무것도 깔지 않아도 볼 수 있습니다.",
-    relLine: "패브릭 · 마인크래프트 26.1.2",
+    relLine: "패브릭 · 마인크래프트 26.3",
     dlJar: "jar 내려받기", changelog: "커밋 기록", dlSize: "MB",
     requires: "필요한 것", notRequired: "필요 없는 것",
     nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "라이브 시청용 설치",
@@ -111,7 +111,7 @@ const T = {
     prev: "Prev", next: "Next",
     kInstall: "INSTALL", dlH: "Get the client mod",
     dlP: "You only need the mod to play. Watching boards on this site needs nothing installed.",
-    relLine: "Fabric · Minecraft 26.1.2",
+    relLine: "Fabric · Minecraft 26.3",
     dlJar: "Download jar", changelog: "Commits", dlSize: "MB",
     requires: "REQUIRES", notRequired: "NOT REQUIRED",
     nr1: "A server to host", nr2: "A separate account — your Minecraft account signs you in", nr3: "Anything installed to watch",
@@ -139,7 +139,7 @@ const OS_STEPS = {
   ko: {
     win: [
       { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 Windows 설치 파일을 받아 실행하고, 처음 켤 때 마인크래프트 계정으로 로그인합니다." },
-      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.1.2 를 고르고, 모드 로더에서 Fabric 을 선택합니다. 이름은 아무거나 좋습니다." },
+      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.3 를 고르고, 모드 로더에서 Fabric 을 선택합니다. 이름은 아무거나 좋습니다." },
       { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 검색해 추가합니다. 둘 중 하나라도 없으면 모드가 로드되지 않습니다." },
       { n: "04", title: "mchx 넣기", body: "위에서 받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다. 인스턴스 창에 끌어다 놓아도 됩니다." },
       { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다. 안 뜨면 03 을 다시 확인해 주세요." },
@@ -147,7 +147,7 @@ const OS_STEPS = {
     ],
     mac: [
       { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 macOS 빌드를 받아 응용 프로그램에 옮깁니다. 처음 실행이 막히면 우클릭 후 열기를 한 번만 해 주면 됩니다." },
-      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.1.2 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
+      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.3 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
       { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 추가합니다." },
       { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
       { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
@@ -155,7 +155,7 @@ const OS_STEPS = {
     ],
     linux: [
       { n: "01", title: "Prism Launcher 설치", body: "배포판 패키지나 Flatpak 으로 깔면 됩니다. AppImage 도 그대로 동작합니다.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
-      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.1.2 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
+      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.3 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
       { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 추가합니다." },
       { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
       { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
@@ -165,7 +165,7 @@ const OS_STEPS = {
   en: {
     win: [
       { n: "01", title: "Install Prism Launcher", body: "Grab the Windows installer from the official site and sign in with your Minecraft account on first run." },
-      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.1.2, then choose Fabric as the mod loader. Name it whatever you like." },
+      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.3, then choose Fabric as the mod loader. Name it whatever you like." },
       { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — search for Fabric API and Fabric Language Kotlin. The mod will not load without them." },
       { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above. Dragging it onto the instance works too." },
       { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away. If it doesn't, check step 03." },
@@ -173,7 +173,7 @@ const OS_STEPS = {
     ],
     mac: [
       { n: "01", title: "Install Prism Launcher", body: "Download the macOS build and move it to Applications. If Gatekeeper blocks the first run, right-click and Open once." },
-      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.1.2, then choose Fabric as the mod loader." },
+      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.3, then choose Fabric as the mod loader." },
       { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — add Fabric API and Fabric Language Kotlin." },
       { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
       { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
@@ -181,7 +181,7 @@ const OS_STEPS = {
     ],
     linux: [
       { n: "01", title: "Install Prism Launcher", body: "Your distro package or Flatpak both work, as does the AppImage.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
-      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.1.2, then choose Fabric as the mod loader." },
+      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.3, then choose Fabric as the mod loader." },
       { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — add Fabric API and Fabric Language Kotlin." },
       { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
       { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
@@ -600,7 +600,7 @@ function pageInstall() {
       <div class="req">
         <div>
           <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.requires}</div>
-          <div class="bd">Prism Launcher<br />Minecraft 26.1.2<br />Fabric API<br />Fabric Language Kotlin 1.13+</div>
+          <div class="bd">Prism Launcher<br />Minecraft 26.3<br />Fabric API<br />Fabric Language Kotlin 1.13+</div>
         </div>
         <div>
           <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.notRequired}</div>

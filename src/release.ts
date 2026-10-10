@@ -19,7 +19,7 @@
  */
 
 /** Newest published build. Clients below this are offered the update. */
-export const LATEST = "0.1.15";
+export const LATEST = "0.1.16";
 
 /**
  * Oldest build allowed to connect. Clients below this are refused.
@@ -29,7 +29,36 @@ export const LATEST = "0.1.15";
  * tolerable costs more than it saves. Lower it to leave a grace window for a release
  * that changed nothing a client depends on.
  */
-export const MINIMUM = "0.1.1";  // 0.1.15 published; the floor moves in its own deploy
+export const MINIMUM = "0.1.1";  // 0.1.16 published; the floor moves in its own deploy
+
+/**
+ * The oldest build that runs on the Minecraft version the game is played on.
+ *
+ * 0.1.16 is the first build for Minecraft 26.3; everything before it is a 26.1.2 jar.
+ * That is a different kind of "too old" from [MINIMUM], and it needs a different answer.
+ * A client below [MINIMUM] is sent `update_required` with the download, shows an update
+ * button, and installs the jar it is given. Doing that to a 26.1.2 client would install
+ * a 26.3 jar into a 26.1.2 instance, and Fabric would then refuse to start the game at
+ * all — the "update" would be what broke it. The mod cannot change which Minecraft it is
+ * running in, so the only honest thing to send is a sentence telling the player to do it.
+ *
+ * It also has to be a hard line rather than a grace period: the same seed is not
+ * promised to generate the same world across Minecraft versions, and two players in
+ * different worlds is the one thing a match cannot survive.
+ */
+export const MINECRAFT_FLOOR = "0.1.16";
+
+/**
+ * What a client below [MINECRAFT_FLOOR] is told.
+ *
+ * Korean, and one line, because of where it lands: it is sent as the message of a
+ * `protocol_mismatch` error, which is the one server string every build back to 0.1.13
+ * prints verbatim — as a single centred line with no wrapping, on the match-start
+ * screen. Too long and the ends run off a small window. No link either; the address is
+ * there to be typed.
+ */
+export const MINECRAFT_MOVED_NOTICE =
+  "Hex가 마인크래프트 26.3으로 옮겼습니다. mc-hex.com 에서 다시 설치해 주세요.";
 
 /**
  * Where the jar comes from, and what it must hash to.
@@ -59,11 +88,11 @@ export interface Download {
  * come from the same place we already trust for everything else.
  */
 export const DOWNLOAD: Download | null = {
-  url: "https://mc-hex.com/downloads/mchx-0.1.15.jar",
+  url: "https://mc-hex.com/downloads/mchx-0.1.16.jar",
   sha512:
-    "eb13e65a13c2e99228c0c552c624e53d41f7b79171a3e4728314f4b1d2a6f6df" +
-    "1d5f3396b03d9f5dd7d0390ba0ceaa303e0c8971cc1cab1f7f37a020bd9c4913",
-  sizeBytes: 1571982,
+    "3e8e880172824fe722fa42fd5704eb0a37e28834b9a350092bbd44db2bb587da" +
+    "ee6b77164035764362a25f4c74d175140d8357c7094e0add98b7d4eac0232bcd",
+  sizeBytes: 1571897,
 };
 
 /** What the client is told about the newest build. */
@@ -123,9 +152,26 @@ export function isComparable(version: string | null | undefined): version is str
   return parts.length > 0 && parts.every((p) => p.length > 0 && /^\d+$/.test(p));
 }
 
-/** Whether a client reporting `version` is allowed to connect at all. */
-export function isTooOld(version: string | null | undefined): boolean {
-  return isComparable(version) && compareVersions(version, MINIMUM) < 0;
+/**
+ * Whether a client reporting `version` is allowed to connect at all.
+ *
+ * `minimum` is a parameter only so a test can reach this gate: while [MINIMUM] sits
+ * below [MINECRAFT_FLOOR], every build it would refuse is refused by the floor first.
+ */
+export function isTooOld(version: string | null | undefined, minimum: string = MINIMUM): boolean {
+  return isComparable(version) && compareVersions(version, minimum) < 0;
+}
+
+/**
+ * Whether a client reporting `version` is a build for a Minecraft version the game has
+ * left. Asked before [isTooOld], because the two overlap and this one's answer is the
+ * only safe one for a build that satisfies both. See [MINECRAFT_FLOOR].
+ */
+export function isOnOldMinecraft(
+  version: string | null | undefined,
+  floor: string = MINECRAFT_FLOOR,
+): boolean {
+  return isComparable(version) && compareVersions(version, floor) < 0;
 }
 
 /** Whether a client is allowed in but has an update waiting. */

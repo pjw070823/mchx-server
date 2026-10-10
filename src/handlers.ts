@@ -7,7 +7,7 @@ import type { Matchmaker } from "./matchmaker.js";
 import { QUEUE_ERROR_TEXT } from "./matchmaker.js";
 import { send, sendError } from "./wire.js";
 import { issueChallenge, verifyChallenge } from "./auth.js";
-import { isTooOld, releaseInfo } from "./release.js";
+import { isOnOldMinecraft, isTooOld, MINECRAFT_MOVED_NOTICE, releaseInfo } from "./release.js";
 
 // Re-exported so existing importers (index.ts, tests) don't care that these moved.
 export type { ConnState } from "./conn-state.js";
@@ -17,6 +17,12 @@ export { send, sendError } from "./wire.js";
 export interface ServerDeps {
   readonly rooms: RoomRegistry;
   readonly matchmaker: Matchmaker;
+  /**
+   * Overrides for the two build thresholds in `release.ts`. Only tests pass this — it
+   * exists because the shipped constants can leave one gate with nothing to refuse, and
+   * a gate nobody can reach is a gate nobody is testing.
+   */
+  readonly versionGates?: { readonly minecraftFloor?: string; readonly minimum?: string };
 }
 
 /**
@@ -43,12 +49,14 @@ export function handleClientMessage(
   deps: ServerDeps,
 ): void {
   const { rooms, matchmaker } = deps;
+  // A connection `hello` has refused gets no further answers. See [ConnState.refused].
+  if (state.refused) return;
   switch (msg.type) {
     case "ping":
       return send(ws, { type: "pong" });
 
     case "hello":
-      return hello(ws, state, msg);
+      return hello(ws, state, msg, deps);
 
     case "auth_begin": {
       state.challenge = issueChallenge();
@@ -173,16 +181,22 @@ export function handleClose(ws: WebSocket, state: ConnState, deps: ServerDeps): 
  * Version handshake. A client whose protocol we don't speak is told so and disconnected,
  * rather than being allowed to fail confusingly somewhere later in a match.
  *
- * Two gates, in this order, because they fail differently. The protocol gate is about
- * whether we can hold a conversation at all, so it ends in a plain error. The build gate
- * is about whether this client can play the game fairly, and it ends in `update_required`
- * — which carries the download, because that message is the last thing the client will
- * hear from us and "update" with no "from where" is a dead end.
+ * Three gates, in this order, because they fail differently. The protocol gate is about
+ * whether we can hold a conversation at all, so it ends in a plain error. The Minecraft
+ * gate is about a client built for a version of the game we have left: it cannot be
+ * updated from here, only told, so it ends in a sentence. The build gate is about whether
+ * this client can play the game fairly, and it ends in `update_required` — which carries
+ * the download, because that message is the last thing the client will hear from us and
+ * "update" with no "from where" is a dead end.
+ *
+ * The Minecraft gate has to come before the build gate. A build old enough to fail both
+ * must never be offered the download: it would install a jar for the wrong Minecraft.
  */
 function hello(
   ws: WebSocket,
   state: ConnState,
   msg: Extract<ClientMessage, { type: "hello" }>,
+  deps: ServerDeps,
 ): void {
   const version = msg.protocolVersion;
   if (version < MIN_SUPPORTED_PROTOCOL || version > PROTOCOL_VERSION) {
@@ -197,9 +211,23 @@ function hello(
   }
 
   const build = msg.clientVersion ?? null;
-  if (isTooOld(build)) {
-    console.warn(`[ws] ${state.playerId} build ${build} < required ${releaseInfo().minimum}`);
+  const gates = deps.versionGates ?? {};
+
+  if (isOnOldMinecraft(build, gates.minecraftFloor)) {
+    console.warn(`[ws] ${state.playerId} build ${build} is for an older Minecraft — told to reinstall`);
+    // `protocol_mismatch`, not a code of its own: it is the one error whose message every
+    // already-installed build shows the player word for word, and those builds are the
+    // only audience this has. A new code would reach them as "오류 (code): …".
+    sendError(ws, "protocol_mismatch", MINECRAFT_MOVED_NOTICE);
+    state.refused = true;
+    setTimeout(() => ws.close(1008, "minecraft_moved"), UPDATE_NOTICE_GRACE_MS);
+    return;
+  }
+
+  if (isTooOld(build, gates.minimum)) {
+    console.warn(`[ws] ${state.playerId} build ${build} < required ${gates.minimum ?? releaseInfo().minimum}`);
     send(ws, { type: "update_required", yourVersion: build, release: releaseInfo() });
+    state.refused = true;
     // Let the message reach the client before the close frame does. `ws.close()` while a
     // frame is still queued is fine on paper, but the client has to both read it and put
     // it somewhere its UI can find, and a socket that closes in the same tick has been

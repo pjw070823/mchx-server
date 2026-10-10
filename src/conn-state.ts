@@ -54,4 +54,16 @@ export interface ConnState {
   queueCooldownUntil: number;
   /** Liveness sweep: cleared before each ping, set again by the client's pong. */
   isAlive: boolean;
+  /**
+   * Set when `hello` turned this connection away. Everything it sends afterwards is
+   * dropped unanswered.
+   *
+   * The socket stays open for a moment after a refusal so the notice can be read, and
+   * the mod has usually queued `auth_begin` right behind its `hello`. Answering that
+   * with a challenge sends the client off to Mojang, and when it comes back with
+   * `auth_verify` the socket has closed — so it reconnects to send it, is refused again,
+   * and is handed another challenge. Nothing ever breaks that loop but the player
+   * quitting. Optional so that only a refusal has to know the field exists.
+   */
+  refused?: boolean;
 }
