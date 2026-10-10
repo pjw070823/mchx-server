@@ -65,7 +65,7 @@ const T = {
     kInstall: "설치", dlH: "클라이언트 모드 내려받기",
     dlP: "모드는 직접 플레이할 때만 필요합니다. 라이브는 아무것도 깔지 않아도 볼 수 있습니다.",
     relLine: "패브릭 · 마인크래프트 26.3",
-    dlJar: "jar 내려받기", changelog: "커밋 기록", dlSize: "MB",
+    dlJar: "jar 내려받기", dlPack: "모드팩 내려받기", changelog: "커밋 기록", dlSize: "MB",
     footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다",
     stepsTitle: "설치 순서",
   },
@@ -102,7 +102,7 @@ const T = {
     kInstall: "INSTALL", dlH: "Get the client mod",
     dlP: "You only need the mod to play. Watching boards on this site needs nothing installed.",
     relLine: "Fabric · Minecraft 26.3",
-    dlJar: "Download jar", changelog: "Commits", dlSize: "MB",
+    dlJar: "Download jar", dlPack: "Download modpack", changelog: "Commits", dlSize: "MB",
     stepsTitle: "INSTALL STEPS",
     footer: "MINECRAFT HEX · COMMUNITY PROJECT · NOT AFFILIATED WITH MOJANG",
   },
@@ -529,6 +529,7 @@ function pageInstall() {
           ${state.release?.download
             ? `<a class="cta cta-lg" href="${escapeHtml(state.release.download.url)}">${L.dlJar}</a>`
             : ""}
+          ${packUrl ? `<a class="cta-ghost" href="${escapeHtml(packUrl)}" download>${L.dlPack}</a>` : ""}
           <a class="cta-ghost" href="https://github.com/pjw070823/mchx/commits/master" target="_blank" rel="noopener">${L.changelog}</a>
         </div>
       </div>
