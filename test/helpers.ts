@@ -90,9 +90,10 @@ export function seat(
   name: string,
   uuid: string | null = null,
   addr: string | null = null,
+  protocol?: number,
 ) {
   const sock = new FakeWs();
-  const session = room.addPlayer(id, name, uuid, sock.ws, addr);
+  const session = room.addPlayer(id, name, uuid, sock.ws, addr, protocol);
   return { sock, session };
 }
 

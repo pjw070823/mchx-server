@@ -18,6 +18,14 @@ export interface SettlementInput {
   /** Side A's session, even if they have already been removed from the room. */
   readonly a: PlayerSession | null;
   readonly b: PlayerSession | null;
+  /**
+   * What to file each side under when it is more than one person.
+   *
+   * [a] and [b] stay single sessions because rating is between two accounts and only a
+   * 1v1 can be rated. A team is recorded under its members' names together, so the match
+   * list reads right and a search for either teammate finds it. Absent for a 1v1.
+   */
+  readonly teamNames?: { readonly A: string | null; readonly B: string | null };
   readonly winnerSide: Side | null;
   readonly reason: "connection" | "forfeit" | "disconnect";
 }
@@ -52,7 +60,8 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
     bBefore = updB.before; bAfter = updB.after;
     eloChanges[a.id] = updA;
     eloChanges[b.id] = updB;
-  } else if (a && b) {
+  } else if (a && b && !input.teamNames) {
+    // Not for a team: the number would be one member's rating printed beside two names.
     aBefore = a.elo; aAfter = a.elo;
     bBefore = b.elo; bAfter = b.elo;
   }
@@ -76,11 +85,11 @@ export function settleMatch(input: SettlementInput): Record<string, EloChange> {
         boardJson: JSON.stringify(input.board),
         claimedJson: JSON.stringify(input.claimedLog),
         playerAUuid: a?.uuid ?? null,
-        playerAName: a?.name ?? null,
+        playerAName: input.teamNames ? input.teamNames.A : a?.name ?? null,
         playerAEloBefore: aBefore,
         playerAEloAfter: aAfter,
         playerBUuid: b?.uuid ?? null,
-        playerBName: b?.name ?? null,
+        playerBName: input.teamNames ? input.teamNames.B : b?.name ?? null,
         playerBEloBefore: bBefore,
         playerBEloAfter: bAfter,
         rated,

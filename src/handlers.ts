@@ -110,6 +110,19 @@ export function handleClientMessage(
       return state.room.markReady(state.playerId);
     }
 
+    case "choose_team": {
+      if (!state.room || state.isSpectator) return sendError(ws, "no_room", "not in a room");
+      // Silent when refused: the seat simply does not move, and the room screen is
+      // already showing why — the other team is full, or the match has started.
+      if (state.room.chooseTeam(state.playerId, msg.side)) state.room.notifyJoin();
+      return;
+    }
+
+    case "team_world_open": {
+      if (!state.room || state.isSpectator) return;
+      return state.room.teamWorldOpen(state.playerId);
+    }
+
     case "spectate":
       return spectate(ws, state, msg, deps);
 
@@ -302,7 +315,7 @@ function createRoom(
   }
 
   const room = rooms.create();
-  const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr);
+  const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr, protocolOf(state));
   if (!session) {
     // Don't leak a room whose only join failed; the reaper would get it eventually.
     rooms.delete(room.code);
@@ -349,11 +362,26 @@ function joinRoom(
     }
   }
 
-  const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr);
-  if (!session) return sendError(ws, "room_full", "room already has 2 players");
+  // Before the seat is tried, so the reason can be said. `protocol_mismatch` rather than
+  // a code of its own for the same reason the Minecraft gate uses it: it is the one error
+  // whose message an already-installed build shows word for word, and those builds are
+  // the only ones this is ever sent to.
+  if (!room.canSeat(protocolOf(state))) {
+    return sendError(ws, "protocol_mismatch", TEAM_ROOM_NEEDS_UPDATE);
+  }
+
+  const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr, protocolOf(state));
+  if (!session) return sendError(ws, "room_full", "room is full");
   state.room = room;
   room.notifyJoin();
 }
+
+/** Every seat-taking path runs behind [requireHello], so the version is always there. */
+function protocolOf(state: ConnState): number {
+  return state.protocolVersion ?? MIN_SUPPORTED_PROTOCOL;
+}
+
+const TEAM_ROOM_NEEDS_UPDATE = "2대2 방입니다. 모드를 업데이트한 뒤 다시 참여해 주세요.";
 
 /**
  * Who this connection is, as far as the server is concerned.

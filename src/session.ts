@@ -29,6 +29,20 @@ export interface PlayerSession {
   remoteAddr: string | null;
   /** Timestamp of the last accepted claim, for the anti-rapid-fire gate. */
   lastClaimAt: number | null;
+  /**
+   * The wire protocol this seat's client speaks. Decides whether it can be sat in a 2v2
+   * room at all — see `TEAM_PROTOCOL`.
+   */
+  protocol: number;
+  /**
+   * Order of arrival on the current side, room-wide and only ever increasing.
+   *
+   * The lowest on a side owns that side's world. A counter rather than a timestamp
+   * because two joins in the same millisecond must still have an order, and rather than
+   * the map's insertion order because changing teams has to put a player at the back of
+   * the queue they join.
+   */
+  seatedAt: number;
 }
 
 /** The client-facing view of a session — no socket, no anti-cheat bookkeeping. */

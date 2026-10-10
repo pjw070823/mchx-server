@@ -95,6 +95,9 @@ const CLIENT_FIXTURES: ReadonlyArray<{ name: string; json: string; type: string 
   { name: "world_event forfeit", json: '{"type":"world_event","kind":"forfeit","text":"항복"}', type: "world_event" },
   { name: "spectate", json: '{"type":"spectate","roomCode":"TFQY"}', type: "spectate" },
   { name: "join_queue", json: '{"type":"join_queue"}', type: "join_queue" },
+  { name: "choose_team", json: '{"type":"choose_team","side":"B"}', type: "choose_team" },
+  { name: "team_world_open", json: '{"type":"team_world_open"}', type: "team_world_open" },
+  { name: "update_settings to 2v2", json: '{"type":"update_settings","settings":{"gameMode":"2v2"}}', type: "update_settings" },
   { name: "leave_queue", json: '{"type":"leave_queue"}', type: "leave_queue" },
 ];
 

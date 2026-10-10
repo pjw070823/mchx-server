@@ -283,8 +283,18 @@ async function loadStats() {
 
 function matchRow(room) {
   const L = t();
-  const a = (room.players ?? []).find((p) => p.side === "A");
-  const b = (room.players ?? []).find((p) => p.side === "B");
+  // 2대2 방은 한 진영에 두 명입니다. 이름을 이어 붙여 한 칸에 보여주고, 레이팅은
+  // 한 명일 때만 적습니다(둘의 숫자를 한 팀 옆에 적을 자리도, 뜻도 없습니다).
+  const team = (letter) => {
+    const members = (room.players ?? []).filter((p) => p.side === letter);
+    if (members.length === 0) return undefined;
+    return {
+      name: members.map((p) => p.name ?? "").join(", "),
+      elo: members.length === 1 ? members[0].elo : null,
+    };
+  };
+  const a = team("A");
+  const b = team("B");
   const playing = room.status === "playing";
   const size = room.boardSize || 25;
   // 랭크 여부는 방이 어떻게 만들어졌는지로 정해집니다. 예전에는 설정 토글을 봤는데,

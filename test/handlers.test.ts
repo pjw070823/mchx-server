@@ -165,3 +165,60 @@ describe("handlers — disconnect", () => {
     assert.equal(d.rooms.get(code), undefined);
   });
 });
+
+describe("handlers — 2v2 rooms", () => {
+  /** A room its host has switched to 2v2, and the host's connection. */
+  function teamRoom(d: ReturnType<typeof deps>) {
+    const host = fakeConn({ playerId: "host", protocolVersion: 3 });
+    handleClientMessage(host.sock.ws, host.state, { type: "create_room", playerName: "Host" }, d);
+    handleClientMessage(host.sock.ws, host.state, { type: "update_settings", settings: { gameMode: "2v2" } }, d);
+    const code = host.state.room!.code;
+    return { host, code };
+  }
+
+  it("turns away a client too old to share a world, in words it will show", () => {
+    const d = deps();
+    const { code } = teamRoom(d);
+    const old = fakeConn({ playerId: "old", protocolVersion: 2 });
+    handleClientMessage(old.sock.ws, old.state, { type: "join_room", roomCode: code, playerName: "Old" }, d);
+
+    // The one code an installed build prints the message of, rather than a generic line.
+    assert.equal(errorFrom(old.sock), "protocol_mismatch");
+    assert.match(String(old.sock.last("error")?.message), /2대2/);
+    assert.equal(old.state.room, null);
+  });
+
+  it("seats a current client and lets it change teams", () => {
+    const d = deps();
+    const { host, code } = teamRoom(d);
+    const mate = fakeConn({ playerId: "mate", protocolVersion: 3 });
+    handleClientMessage(mate.sock.ws, mate.state, { type: "join_room", roomCode: code, playerName: "Mate" }, d);
+    assert.equal(mate.sock.last("room_state")?.you && (mate.sock.last("room_state")!.you as { side: string }).side, "B");
+
+    host.sock.clear();
+    handleClientMessage(mate.sock.ws, mate.state, { type: "choose_team", side: "A" }, d);
+    const players = host.sock.last("room_state")?.players as Array<{ id: string; side: string }>;
+    assert.deepEqual(players.map((p) => [p.id, p.side]), [["host", "A"], ["mate", "A"]]);
+  });
+
+  it("says nothing when a team change is refused", () => {
+    const d = deps();
+    const { host } = teamRoom(d);
+    host.sock.clear();
+    handleClientMessage(host.sock.ws, host.state, { type: "choose_team", side: "A" }, d);
+    assert.equal(host.sock.sent.length, 0, "already on A: no error, no broadcast");
+  });
+
+  it("passes the host's word that the world is open on to the guest", () => {
+    const d = deps();
+    const { host, code } = teamRoom(d);
+    const mate = fakeConn({ playerId: "mate", protocolVersion: 3 });
+    handleClientMessage(mate.sock.ws, mate.state, { type: "join_room", roomCode: code, playerName: "Mate" }, d);
+    handleClientMessage(mate.sock.ws, mate.state, { type: "choose_team", side: "A" }, d);
+    handleClientMessage(host.sock.ws, host.state, { type: "start_match" }, d);
+
+    handleClientMessage(host.sock.ws, host.state, { type: "team_world_open" }, d);
+    assert.equal(mate.sock.all("team_world_ready").length, 1);
+    host.state.room!.forfeitMatch("host");
+  });
+});

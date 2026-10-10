@@ -136,25 +136,319 @@ describe("Room — settings", () => {
     assert.equal(room.updateSettings("p1", { saturation: false }), false);
   });
 
-  it("will not switch a room to a mode the game cannot play", () => {
-    // 2v2 is in the wire schema and nowhere else. Accepting it took requiredPlayers() to
-    // four, which no 1v1 room can ever reach — the host would brick their own room from
-    // a frame the mod's own button refuses to send.
+  it("switches to 2v2 and widens the room to four seats", () => {
     const room = new Room(FAST);
     seat(room, "p1", "Alice");
     room.updateSettings("p1", { gameMode: "2v2" });
 
-    assert.equal(room.settings.gameMode, "1v1", "the unplayable mode must be dropped");
-    assert.equal(room.requiredPlayers(), 2);
+    assert.equal(room.settings.gameMode, "2v2");
+    assert.equal(room.requiredPlayers(), 4);
   });
 
-  it("keeps the rest of a patch that also asks for 2v2", () => {
+  it("will not switch to 2v2 over a client too old to share a world", () => {
+    // Dealt the guest's role, that client would ignore it and generate a world of its
+    // own — in the match, on the team, and no use to it.
     const room = new Room(FAST);
     seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob", null, null, 2);
     room.updateSettings("p1", { gameMode: "2v2", saturation: false });
 
-    assert.equal(room.settings.gameMode, "1v1");
+    assert.equal(room.settings.gameMode, "1v1", "the mode the room cannot take is dropped");
     assert.equal(room.settings.saturation, false, "one bad field must not void the others");
+  });
+
+  it("will not seat such a client in a room that is already 2v2", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    room.updateSettings("p1", { gameMode: "2v2" });
+
+    assert.equal(room.canSeat(2), false);
+    assert.equal(seat(room, "p2", "Bob", null, null, 2).session, null);
+    assert.ok(seat(room, "p3", "Carol").session);
+  });
+
+  it("will not go back to 1v1 with more than two seated", () => {
+    const { room } = teamRoom(3);
+    room.updateSettings("p1", { gameMode: "1v1" });
+    assert.equal(room.settings.gameMode, "2v2");
+  });
+
+  it("puts two teammates opposite each other when it does go back to 1v1", () => {
+    // Left on one side with one seat each, the match that started would be a solo run
+    // for two with nobody to play against.
+    const { room, seats } = teamRoom(1);
+    const bob = seat(room, "p2", "Bob");
+    assert.equal(room.chooseTeam("p2", "A"), true);
+    room.updateSettings("p1", { gameMode: "1v1" });
+
+    assert.equal(room.settings.gameMode, "1v1");
+    assert.equal(seats[0]!.session?.side, "A");
+    assert.equal(bob.session?.side, "B");
+  });
+});
+
+/**
+ * A 2v2 room with [count] players in it, seated in arrival order: Alice and Carol on A,
+ * Bob and Dave on B.
+ */
+function teamRoom(count: number, config: Partial<RoomConfig> = FAST) {
+  const room = new Room(config);
+  const names = ["Alice", "Bob", "Carol", "Dave"];
+  const seats = [seat(room, "p1", names[0]!)];
+  room.updateSettings("p1", { gameMode: "2v2" });
+  for (let i = 1; i < count; i++) seats.push(seat(room, `p${i + 1}`, names[i]!));
+  return { room, seats };
+}
+
+/** [teamRoom], started, with every world reported in. */
+function teamMatch(count: number, config: Partial<RoomConfig> = FAST) {
+  const made = teamRoom(count, config);
+  assert.deepEqual(made.room.startMatchByHost("p1"), { ok: true });
+  for (let i = 1; i <= count; i++) made.room.markReady(`p${i}`);
+  return made;
+}
+
+type WorldFrame = { role: string; relayToken: string | null; mates: Array<{ name: string }> };
+const worldOf = (sock: FakeWs) => sock.last("match_start")?.world as WorldFrame;
+
+describe("Room — 2v2 seating", () => {
+  it("fills the two teams evenly and refuses a fifth player", () => {
+    const { room, seats } = teamRoom(4);
+    assert.deepEqual(seats.map((s) => s.session?.side), ["A", "B", "A", "B"]);
+    assert.equal(seat(room, "p5", "Eve").session, null);
+  });
+
+  it("lets a player move to the other team while it has room", () => {
+    const { room, seats } = teamRoom(3);
+    assert.equal(room.chooseTeam("p2", "A"), false, "A already holds two");
+    assert.equal(room.chooseTeam("p3", "B"), true);
+    assert.equal(seats[2]!.session?.side, "B");
+    assert.equal(room.chooseTeam("p3", "B"), false, "already there");
+  });
+
+  it("does not let anyone change teams once the match is under way", () => {
+    const { room } = teamMatch(3);
+    assert.equal(room.chooseTeam("p3", "B"), false);
+  });
+
+  it("marks the first player on each side as the one whose world it is", () => {
+    const { room, seats } = teamRoom(4);
+    room.notifyJoin();
+    const players = seats[0]!.sock.last("room_state")?.players as Array<{ id: string; worldOwner: boolean }>;
+    assert.deepEqual(
+      players.map((p) => [p.id, p.worldOwner]),
+      [["p1", true], ["p3", false], ["p2", true], ["p4", false]],
+    );
+  });
+
+  it("sends a mover to the back, so the world stays with whoever already had it", () => {
+    const { room, seats } = teamRoom(2);
+    assert.equal(room.chooseTeam("p1", "B"), true);
+    room.notifyJoin();
+    const players = seats[0]!.sock.last("room_state")?.players as Array<{ id: string; worldOwner: boolean }>;
+    assert.deepEqual(players.map((p) => [p.id, p.worldOwner]), [["p2", true], ["p1", false]]);
+  });
+
+  it("never names a teammate as the opponent", () => {
+    // A client that only reads `opponent` takes null to mean a solo run. For a player
+    // whose only company is a teammate, that is what it is.
+    const { room, seats } = teamRoom(1);
+    seat(room, "p2", "Bob");
+    room.chooseTeam("p2", "A");
+    room.notifyJoin();
+    assert.equal(seats[0]!.sock.last("room_state")?.opponent, null);
+  });
+});
+
+describe("Room — 2v2 worlds", () => {
+  it("has each team share one world, run by whoever sat down first", () => {
+    const { seats } = teamMatch(4);
+    const [alice, bob, carol, dave] = seats.map((s) => worldOf(s.sock));
+
+    assert.equal(alice!.role, "host");
+    assert.equal(carol!.role, "guest");
+    assert.deepEqual(alice!.mates.map((m) => m.name), ["Carol"]);
+    assert.deepEqual(carol!.mates.map((m) => m.name), ["Alice"]);
+    assert.equal(bob!.role, "host");
+    assert.equal(dave!.role, "guest");
+
+    const tokens = [alice, bob, carol, dave].map((w) => w!.relayToken);
+    assert.equal(new Set(tokens).size, 4, "each end of each link has a secret of its own");
+    assert.ok(tokens.every((t) => typeof t === "string" && t.length >= 32));
+  });
+
+  it("gives a player with no teammate a world of their own", () => {
+    const { seats } = teamMatch(3);
+    assert.equal(worldOf(seats[1]!.sock).role, "own");
+    assert.equal(worldOf(seats[1]!.sock).relayToken, null);
+    assert.equal(worldOf(seats[0]!.sock).role, "host");
+  });
+
+  it("tells a spectator nothing about anyone's world", () => {
+    const { room } = teamRoom(4);
+    const spec = new FakeWs();
+    room.addSpectator(spec.ws);
+    room.startMatchByHost("p1");
+    assert.equal(spec.last("match_start")?.world, null);
+  });
+
+  it("tells the guest when the host's world is open, and only the guest", () => {
+    const { room, seats } = teamRoom(4);
+    room.startMatchByHost("p1");
+    room.teamWorldOpen("p3"); // a guest saying so means nothing
+    assert.equal(seats[0]!.sock.all("team_world_ready").length, 0);
+
+    room.teamWorldOpen("p1");
+    assert.equal(seats[2]!.sock.all("team_world_ready").length, 1);
+    assert.equal(seats[3]!.sock.all("team_world_ready").length, 0, "the other team's guest waits for its own host");
+    assert.equal(seats[0]!.sock.all("team_world_ready").length, 0);
+  });
+
+  it("tells a guest again who reconnects after it was said", async () => {
+    const { room } = teamRoom(1, { ...FAST, reconnectGraceMs: 500 });
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.chooseTeam("p2", "A");
+    room.startMatchByHost("p1");
+    room.teamWorldOpen("p1");
+
+    room.removePlayer("p2");
+    const back = new FakeWs();
+    assert.ok(room.reconnectPlayer("p2", back.ws, null));
+    room.sendReconnectSnapshot("p2");
+    assert.equal(back.all("team_world_ready").length, 1);
+  });
+
+  it("waits for all four worlds before the countdown", () => {
+    const { room, seats } = teamRoom(4);
+    room.startMatchByHost("p1");
+    for (const id of ["p1", "p2", "p3"]) room.markReady(id);
+    assert.equal(seats[0]!.sock.all("countdown_start").length, 0);
+    room.markReady("p4");
+    assert.equal(seats[0]!.sock.all("countdown_start").length, 1);
+  });
+
+  it("ends with no winner when a player on each side never loads", async () => {
+    const { room, seats } = teamRoom(4, { ...FAST, readyTimeoutMs: 10 });
+    room.startMatchByHost("p1");
+    room.markReady("p1");
+    room.markReady("p2");
+    await new Promise((r) => setTimeout(r, 60)); // shared worlds are allowed twice as long
+    assert.equal(seats[0]!.sock.last("match_end")?.winner, null);
+  });
+
+  it("opens no relay link for a match nobody shares a world in", async () => {
+    const { relayHub } = await import("../src/relay.js");
+    const before = relayHub.size;
+    const { room } = teamMatch(2);
+    assert.equal(relayHub.size, before);
+    room.forfeitMatch("p1");
+  });
+
+  it("closes a match's links when the next one starts", async () => {
+    const { relayHub } = await import("../src/relay.js");
+    const before = relayHub.size;
+    const { room } = teamMatch(4);
+    assert.equal(relayHub.size, before + 2);
+    room.forfeitMatch("p1");
+    assert.equal(relayHub.size, before + 2, "the result is still on screen in those worlds");
+    room.startMatchByHost("p1");
+    assert.equal(relayHub.size, before + 2, "two closed, two opened");
+    room.chooseTeam("p3", "B");
+  });
+});
+
+describe("Room — 2v2 play", () => {
+  it("counts either teammate's claim for the team, and wins on the team's chain", () => {
+    const { room, seats } = teamMatch(4);
+    const board = boardOf(seats[0]!.sock);
+    A_WINNING_CHAIN.forEach((tile, i) => {
+      room.attemptClaim(i % 2 === 0 ? "p1" : "p3", tile, missionFor(board, tile));
+    });
+    assert.equal(seats[3]!.sock.all("tile_claimed").length, 5);
+    assert.equal(seats[3]!.sock.last("match_end")?.winner, "A");
+  });
+
+  it("is lost by the team whose player concedes", () => {
+    const { room, seats } = teamMatch(4);
+    assert.equal(room.forfeitMatch("p3"), true);
+    assert.equal(seats[0]!.sock.last("match_end")?.winner, "B");
+    assert.equal(room.size(), 4, "and everybody is still seated for the next one");
+  });
+
+  it("is lost by the team whose player leaves — not handed to their teammate", () => {
+    // "Whoever is left wins" was right for two players. With four, the first one left
+    // in the list can be the leaver's own teammate.
+    const { room, seats } = teamMatch(4);
+    room.forfeitByLeave("p1");
+    assert.equal(seats[2]!.sock.last("match_end")?.winner, "B");
+    assert.equal(room.size(), 3);
+  });
+
+  it("is lost by the team whose player never comes back from a disconnect", async () => {
+    const { room, seats } = teamMatch(4);
+    room.removePlayer("p4");
+    assert.equal(seats[0]!.sock.all("match_end").length, 0, "the seat is held first");
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(seats[0]!.sock.last("match_end")?.winner, "A");
+  });
+
+  it("starts two against one", () => {
+    const { room, seats } = teamMatch(3);
+    assert.equal(room.status, "playing");
+    assert.equal(seats[0]!.sock.last("match_start")?.solo, false);
+    room.forfeitMatch("p2");
+    assert.equal(seats[0]!.sock.last("match_end")?.winner, "A");
+  });
+
+  it("treats one team by itself as a solo run for two", () => {
+    const { room, seats } = teamRoom(1);
+    const bob = seat(room, "p2", "Bob");
+    room.chooseTeam("p2", "A");
+    assert.deepEqual(room.startMatchByHost("p1"), { ok: true });
+
+    assert.equal(seats[0]!.sock.last("match_start")?.solo, true);
+    assert.equal(worldOf(bob.sock).role, "guest");
+    room.markReady("p1");
+    room.markReady("p2");
+    room.forfeitMatch("p2");
+    assert.equal(seats[0]!.sock.last("match_end")?.winner, null, "there is nobody to hand it to");
+  });
+
+  it("files a team's match under both of its names", async () => {
+    const { getAllMatches } = await import("../src/db.js");
+    const { room } = teamMatch(4);
+    room.forfeitMatch("p2");
+    const row = getAllMatches(1, 0)[0]!;
+    assert.equal(row.player_a_name, "Alice, Carol");
+    assert.equal(row.player_b_name, "Bob, Dave");
+    assert.equal(row.winner_side, "A");
+    assert.equal(row.player_a_elo_after, null, "one member's rating beside two names would be a lie");
+  });
+});
+
+describe("Room — 2v2 chat", () => {
+  it("does not repeat chat to the teammate standing in the same world", () => {
+    const { room, seats } = teamMatch(4);
+    for (const s of seats) s.sock.clear();
+
+    room.broadcastChat("p1", "hello");
+    assert.equal(seats[2]!.sock.all("chat_message").length, 0, "the game already showed Carol");
+    assert.equal(seats[1]!.sock.all("chat_message").length, 1);
+    assert.equal(seats[3]!.sock.all("chat_message").length, 1);
+  });
+
+  it("does relay it in the room, where nobody is in a world yet", () => {
+    const { room, seats } = teamRoom(4);
+    room.broadcastChat("p1", "hello");
+    assert.equal(seats[2]!.sock.all("chat_message").length, 1);
+  });
+
+  it("tells the teammate about a surrender, which the game knows nothing about", () => {
+    const { room, seats } = teamMatch(4);
+    room.broadcastWorldEvent("p1", "death", "Alice fell");
+    assert.equal(seats[2]!.sock.all("world_event_message").length, 0);
+    room.broadcastWorldEvent("p1", "forfeit", "Alice gave up");
+    assert.equal(seats[2]!.sock.all("world_event_message").length, 1);
   });
 });
 

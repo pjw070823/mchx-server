@@ -39,8 +39,13 @@ export class RoomBroadcaster {
    * already displayed the message locally and would otherwise see it twice.
    */
   toEveryoneExcept(playerId: string, msg: ServerMessage): void {
-    for (const [id, p] of this.players) {
-      if (id !== playerId) this.send(p.ws, msg);
+    this.toSpectatorsAnd((p) => p.id !== playerId, msg);
+  }
+
+  /** Every spectator, and the players [wanted] picks. */
+  toSpectatorsAnd(wanted: (player: PlayerSession) => boolean, msg: ServerMessage): void {
+    for (const p of this.players.values()) {
+      if (wanted(p)) this.send(p.ws, msg);
     }
     for (const sp of this.spectators) this.send(sp, msg);
   }

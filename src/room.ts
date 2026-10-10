@@ -2,13 +2,16 @@ import { customAlphabet } from "nanoid";
 import type { WebSocket } from "ws";
 import type {
   BoardTile,
+  MatchWorld,
+  RoomPlayer,
   RoomSettings,
   RoomStatus,
   ServerMessage,
   Side,
   TileId,
 } from "./protocol.js";
-import { DEFAULT_SETTINGS } from "./protocol.js";
+import { DEFAULT_SETTINGS, PROTOCOL_VERSION, TEAM_PROTOCOL } from "./protocol.js";
+import { relayHub, type RelayLink } from "./relay.js";
 import { DEFAULT_ELO, getOrCreatePlayer } from "./db.js";
 import { MatchEngine } from "./match-engine.js";
 import { RoomBroadcaster } from "./broadcaster.js";
@@ -83,6 +86,21 @@ export class Room {
    */
   private solo = false;
 
+  /** Hands out [PlayerSession.seatedAt]. */
+  private seatCounter = 0;
+
+  /**
+   * Where each player plays the match under way.
+   *
+   * Only teams of two appear here: everybody else has a world of their own, which is the
+   * absence of an entry. Host and guest of one team hold the same link, and that shared
+   * reference is also how "these two are in the same world" is asked.
+   */
+  private readonly worlds = new Map<string, TeamWorldSeat>();
+
+  /** Closes the last match's links once its players have had time to leave the world. */
+  private linkTimer: NodeJS.Timeout | null = null;
+
   constructor(config: Partial<RoomConfig> = {}, origin: RoomOrigin = "custom") {
     this.code = newRoomCode();
     this.origin = origin;
@@ -127,15 +145,28 @@ export class Room {
     }
   }
 
+  /**
+   * Whether a client speaking [protocol] can play in this room as it is set up now.
+   *
+   * A 2v2 room needs every client to understand being a guest in a teammate's world. One
+   * that does not would be dealt that role, ignore it, and sit in a world of its own for
+   * the whole match — unable to help its team and unaware of it.
+   */
+  canSeat(protocol: number): boolean {
+    return this.settings.gameMode !== "2v2" || protocol >= TEAM_PROTOCOL;
+  }
+
   addPlayer(
     playerId: string,
     name: string,
     uuid: string | null,
     ws: WebSocket,
     remoteAddr: string | null = null,
+    protocol: number = PROTOCOL_VERSION,
   ): PlayerSession | null {
     if (this.players.size >= this.requiredPlayers()) return null;
     if (this.status !== "waiting") return null;
+    if (!this.canSeat(protocol)) return null;
 
     // Take the side nobody is sitting on, rather than deriving it from the head count.
     // Counting was wrong the moment a seat was vacated and refilled: A leaving left one
@@ -160,6 +191,7 @@ export class Room {
     const session: PlayerSession = {
       id: playerId, name, side, uuid, ws, elo, gamesPlayed,
       disconnectedAt: null, forfeitTimer: null, remoteAddr, lastClaimAt: null,
+      protocol, seatedAt: ++this.seatCounter,
     };
     this.players.set(playerId, session);
     this.touchEmpty();
@@ -168,13 +200,47 @@ export class Room {
     return session;
   }
 
-  /** The seat colour nobody holds, or null when both are taken. */
+  /**
+   * The side a new arrival goes to: the emptier one, A on a tie, or null when both are
+   * full.
+   *
+   * In a 1v1 that is "the colour nobody holds". In a 2v2 it fills the teams evenly, so
+   * four strangers joining in a row land two and two without anybody choosing — and a
+   * player who wants the other team can still move there with [chooseTeam].
+   */
   private freeSide(): Side | null {
-    const taken = new Set<Side>();
-    for (const p of this.players.values()) {
-      if (p.side) taken.add(p.side);
-    }
-    return (["A", "B"] as const).find((s) => !taken.has(s)) ?? null;
+    const a = this.membersOf("A").length;
+    const b = this.membersOf("B").length;
+    const order: readonly Side[] = a <= b ? ["A", "B"] : ["B", "A"];
+    const cap = this.seatsPerSide();
+    return order.find((side) => (side === "A" ? a : b) < cap) ?? null;
+  }
+
+  private seatsPerSide(): number {
+    return this.settings.gameMode === "2v2" ? 2 : 1;
+  }
+
+  /** Everyone on [side], in the order they sat down on it. */
+  private membersOf(side: Side): PlayerSession[] {
+    return [...this.players.values()]
+      .filter((p) => p.side === side)
+      .sort((x, y) => x.seatedAt - y.seatedAt);
+  }
+
+  /**
+   * Move to the other team, if it has room.
+   *
+   * Pre-match and custom rooms only. The mover goes to the back of the team they join:
+   * whoever was already there keeps the world, because they have been told it is theirs.
+   */
+  chooseTeam(playerId: string, side: Side): boolean {
+    if (this.origin !== "custom" || this.status !== "waiting") return false;
+    const player = this.players.get(playerId);
+    if (!player || player.side === side) return false;
+    if (this.membersOf(side).length >= this.seatsPerSide()) return false;
+    player.side = side;
+    player.seatedAt = ++this.seatCounter;
+    return true;
   }
 
   getPlayer(playerId: string): PlayerSession | null {
@@ -315,7 +381,15 @@ export class Room {
 
     const remaining = [...this.players.values()].find((p) => p.disconnectedAt === null) ?? null;
     if (this.hostId === playerId) this.hostId = remaining?.id ?? null;
-    this.endMatch(remaining?.side ?? null, reason, removed);
+
+    // The other side wins — if anybody on it is still here. Asked about the side rather
+    // than about "whoever is left", because in a team match the one left may be the
+    // leaver's own teammate: a team loses when either of its players goes, and its
+    // remaining member must not be handed the match for it.
+    const other: Side | null = removed.side === "A" ? "B" : removed.side === "B" ? "A" : null;
+    const otherPresent = other !== null &&
+      [...this.players.values()].some((p) => p.side === other && p.disconnectedAt === null);
+    this.endMatch(otherPresent ? other : null, reason, removed);
   }
 
   private cancelForfeitTimer(session: PlayerSession): void {
@@ -354,15 +428,50 @@ export class Room {
     if (this.hostId !== playerId) return false;
     if (this.status !== "waiting") return false;
 
+    // A mode the people already seated cannot play is dropped from the patch, like a
+    // field the host cannot afford: the rest of what they asked for still applies.
+    const patch = { ...partial };
+    if (patch.gameMode && patch.gameMode !== this.settings.gameMode && !this.fits(patch.gameMode)) {
+      delete patch.gameMode;
+    }
+
     const requester = this.players.get(playerId);
     const { settings, deniedByTier } = applySettingsPatch(
-      this.settings, partial, tierOf(requester?.uuid ?? null),
+      this.settings, patch, tierOf(requester?.uuid ?? null),
     );
     if (deniedByTier.length > 0) {
       console.log(`[room ${this.code}] settings denied by tier: ${deniedByTier.join(", ")}`);
     }
+    const modeChanged = settings.gameMode !== this.settings.gameMode;
     this.settings = settings;
+    if (modeChanged) this.spreadAcrossSides();
     return true;
+  }
+
+  /** Whether the players seated right now could play [mode]. */
+  private fits(mode: RoomSettings["gameMode"]): boolean {
+    if (mode === "1v1") return this.players.size <= 2;
+    for (const p of this.players.values()) {
+      if (p.protocol < TEAM_PROTOCOL) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Going back to 1v1 with two teammates seated: put them opposite each other.
+   *
+   * Otherwise the room holds two players on one side with a seat limit of one, and the
+   * match that starts is a solo run for two with nobody to play against.
+   */
+  private spreadAcrossSides(): void {
+    if (this.settings.gameMode !== "1v1") return;
+    for (const side of ["A", "B"] as const) {
+      const members = this.membersOf(side);
+      const moved = members[1];
+      if (!moved) continue;
+      moved.side = side === "A" ? "B" : "A";
+      moved.seatedAt = ++this.seatCounter;
+    }
   }
 
   // --- match lifecycle -----------------------------------------------------------------
@@ -378,20 +487,26 @@ export class Room {
 
   startMatchByHost(playerId: string): { ok: boolean; reason?: string } {
     if (this.origin !== "custom" || this.hostId !== playerId) return { ok: false, reason: "not_host" };
-    if (!this.isReadyToStart() && !this.canStartSolo()) return { ok: false, reason: "not_ready" };
+    if (!this.isReadyToStart() && !this.canStartShort()) return { ok: false, reason: "not_ready" };
     this.beginMatch();
     return { ok: true };
   }
 
   /**
-   * A custom room with exactly one player in it may start: that is a solo run.
+   * Whether a custom room's host may start with seats still empty.
+   *
+   * A 1v1 room may start with one player: that is a solo run. A 2v2 room may start with
+   * anyone at all in it — two against one, one against one, or one team by itself, which
+   * is a solo run for that team. What kind of match it is follows from who was seated,
+   * not from the mode's name; see [beginMatch].
    *
    * Reached only through [startMatchByHost], which has already established that this is
    * a custom room and the caller is its host. The matchmaker's [start] does not come
    * through here, so a ranked room still needs both of its players.
    */
-  private canStartSolo(): boolean {
+  private canStartShort(): boolean {
     if (this.status !== "waiting" && this.status !== "ended") return false;
+    if (this.settings.gameMode === "2v2") return this.players.size >= 1;
     return this.players.size === 1;
   }
 
@@ -408,7 +523,10 @@ export class Room {
   private beginMatch(): void {
     this.engine.begin();
     this.status = "playing";
-    this.solo = this.players.size === 1;
+    // One side with nobody on it, not one player in the room: two teammates with the
+    // other team empty have no opponent either.
+    this.solo = this.membersOf("A").length === 0 || this.membersOf("B").length === 0;
+    this.assignWorlds();
     this.matchSettled = false;
     this.endedAt = null;
     // Clear per-match session state so gates and grace timers don't carry over.
@@ -420,6 +538,86 @@ export class Room {
     for (const p of this.players.values()) this.sendMatchSnapshot(p.ws, p);
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
     this.armReadyTimeout();
+  }
+
+  /**
+   * Decide where everybody plays, and open a relay link for each team that shares.
+   *
+   * A team of two plays in one world. It runs in the game of whoever sat down on that
+   * side first — the seat marked for it on the room screen — and the other joins it. A
+   * side with one player on it needs none of this.
+   */
+  private assignWorlds(): void {
+    this.closeLinks();
+    for (const side of ["A", "B"] as const) {
+      const [host, ...guests] = this.membersOf(side);
+      if (!host || guests.length === 0) continue;
+
+      const hostId = host.id;
+      const link = relayHub.open((streamId) => {
+        // Looked up when it fires, not captured: a host who reconnected mid-match is
+        // the same seat on a different socket.
+        const session = this.players.get(hostId);
+        if (session) this.bus.send(session.ws, { type: "relay_stream", streamId });
+      });
+      this.worlds.set(hostId, { role: "host", link, open: false });
+      for (const guest of guests) this.worlds.set(guest.id, { role: "guest", link, open: false });
+    }
+  }
+
+  /** End every team link. The games on either end of one see their connection drop. */
+  private closeLinks(): void {
+    if (this.linkTimer !== null) {
+      clearTimeout(this.linkTimer);
+      this.linkTimer = null;
+    }
+    const closed = new Set<RelayLink>();
+    for (const seat of this.worlds.values()) {
+      if (closed.has(seat.link)) continue;
+      closed.add(seat.link);
+      relayHub.close(seat.link);
+    }
+    this.worlds.clear();
+  }
+
+  /**
+   * The host's world is up. Tell the teammate who has been waiting to join it.
+   *
+   * Remembered as well as relayed, because a guest who reconnects after this was said
+   * has no other way to learn it.
+   */
+  teamWorldOpen(playerId: string): void {
+    if (this.status !== "playing") return;
+    const seat = this.worlds.get(playerId);
+    if (!seat || seat.role !== "host") return;
+    for (const [id, other] of this.worlds) {
+      if (other.link !== seat.link) continue;
+      other.open = true;
+      if (other.role !== "guest") continue;
+      const guest = this.players.get(id);
+      if (guest) this.bus.send(guest.ws, { type: "team_world_ready" });
+    }
+  }
+
+  /** What [viewer] is told about where they play. */
+  private worldFor(viewer: PlayerSession): MatchWorld {
+    const seat = this.worlds.get(viewer.id);
+    if (!seat) return { role: "own", relayToken: null, mates: [] };
+    const mates = [...this.players.values()]
+      .filter((p) => p.id !== viewer.id && this.worlds.get(p.id)?.link === seat.link)
+      .map((p) => ({ uuid: p.uuid, name: p.name }));
+    return {
+      role: seat.role,
+      relayToken: seat.role === "host" ? seat.link.hostToken : seat.link.guestToken,
+      mates,
+    };
+  }
+
+  /** Whether two players are standing in the same world right now. */
+  private sharesWorld(a: PlayerSession, b: PlayerSession): boolean {
+    if (this.status !== "playing") return false;
+    const link = this.worlds.get(a.id)?.link;
+    return link !== undefined && link === this.worlds.get(b.id)?.link;
   }
 
   /**
@@ -437,8 +635,11 @@ export class Room {
       if (this.status !== "playing" || this.engine.isArmed) return;
 
       const stalled = [...this.players.values()].filter((p) => !this.engine.isReady(p.id));
-      // Everyone stalled: no one to award it to, so end it with no winner.
-      if (stalled.length === this.players.size) {
+      // Everyone stalled, or somebody on each side: no one to award it to, so end it
+      // with no winner. The second case only exists with teams — one player from each
+      // still loading is a match neither side was ready for.
+      const stalledSides = new Set(stalled.map((p) => p.side));
+      if (stalled.length === this.players.size || stalledSides.size > 1) {
         console.warn(`[room ${this.code}] no world ready in time — ending with no winner`);
         this.endMatch(null, "disconnect", null);
         return;
@@ -446,7 +647,12 @@ export class Room {
       const loser = stalled[0]!;
       console.warn(`[room ${this.code}] ${loser.name} never reported world_ready — forfeiting`);
       this.endByForfeit(loser.id, "disconnect");
-    }, this.config.readyTimeoutMs);
+      // A shared world is generated by one player and then joined by another, one after
+      // the other, so it is allowed twice as long as a world somebody makes for themselves.
+    }, this.config.readyTimeoutMs * (this.worlds.size > 0 ? 2 : 1));
+    // Nothing should stay alive for this alone: it is a deadline on a match, and a
+    // process with no sockets left has no match.
+    this.readyTimer.unref();
   }
 
   private clearReadyTimeout(): void {
@@ -519,6 +725,18 @@ export class Room {
     this.endedAt = Date.now();
     this.bus.toEveryone({ type: "match_end", winner: winnerSide, reason, eloChanges });
 
+    // Not closed here. The result stays on screen for some seconds with everybody still
+    // standing in their world, and cutting the link now would throw the guest out of it
+    // onto a "connection lost" screen over the top of the result. A rematch closes them
+    // at once; this is for the room that never plays again.
+    if (this.worlds.size > 0 && this.linkTimer === null) {
+      this.linkTimer = setTimeout(() => {
+        this.linkTimer = null;
+        this.closeLinks();
+      }, LINK_LINGER_MS);
+      this.linkTimer.unref();
+    }
+
     // Ranked rooms are one-shot. Returning to `waiting` would put a room whose code both
     // players know back on the joinable list, and the ladder decides pairings, not a code.
     // Clients still need the status change, hence the notify either way.
@@ -533,6 +751,11 @@ export class Room {
   ) {
     const all = [...this.players.values()];
     if (quitter) all.push(quitter);
+    const sideOf = (side: Side) =>
+      all.filter((s) => s.side === side).sort((x, y) => x.seatedAt - y.seatedAt);
+    const as = sideOf("A");
+    const bs = sideOf("B");
+    const names = (team: PlayerSession[]) => team.map((s) => s.name).join(", ") || null;
     return settleMatch({
       roomCode: this.code,
       seed: this.engine.seed,
@@ -542,8 +765,9 @@ export class Room {
       settings: this.settings,
       origin: this.origin,
       playOpened: this.engine.isArmed,
-      a: all.find((s) => s.side === "A") ?? null,
-      b: all.find((s) => s.side === "B") ?? null,
+      a: as[0] ?? null,
+      b: bs[0] ?? null,
+      teamNames: as.length > 1 || bs.length > 1 ? { A: names(as), B: names(bs) } : undefined,
       winnerSide,
       reason,
     });
@@ -577,13 +801,24 @@ export class Room {
     if (this.status === "playing" || this.status === "ended") {
       this.sendMatchSnapshot(session.ws, session);
     }
-    if (this.status === "playing") this.sendCountdownIfArmed(session.ws);
+    if (this.status === "playing") {
+      this.sendCountdownIfArmed(session.ws);
+      const seat = this.worlds.get(playerId);
+      if (seat?.role === "guest" && seat.open) this.bus.send(session.ws, { type: "team_world_ready" });
+    }
   }
 
+  /**
+   * Relay a chat line to everyone who has not already seen it.
+   *
+   * The sender's own game showed it as they typed. So did their teammate's, when the two
+   * are in one world: the game delivers chat to everybody standing in it, and sending it
+   * round again through here would print every line twice.
+   */
   broadcastChat(playerId: string, text: string): void {
     const sender = this.players.get(playerId);
     if (!sender) return;
-    this.bus.toEveryoneExcept(playerId, {
+    this.bus.toSpectatorsAnd((p) => p.id !== playerId && !this.sharesWorld(sender, p), {
       type: "chat_message", senderId: playerId, senderName: sender.name, text,
     });
   }
@@ -591,19 +826,28 @@ export class Room {
   broadcastWorldEvent(playerId: string, kind: "death" | "advancement" | "forfeit", text: string): void {
     const sender = this.players.get(playerId);
     if (!sender) return;
-    this.bus.toEveryoneExcept(playerId, {
-      type: "world_event_message", senderId: playerId, senderName: sender.name, kind, text,
-    });
+    // Deaths and advancements are announced by the game to everyone in the world, like
+    // chat. Giving up is ours — the game has no idea a match exists — so the teammate
+    // hears about it from here or not at all.
+    const seenInWorld = kind !== "forfeit";
+    this.bus.toSpectatorsAnd(
+      (p) => p.id !== playerId && !(seenInWorld && this.sharesWorld(sender, p)),
+      { type: "world_event_message", senderId: playerId, senderName: sender.name, kind, text },
+    );
   }
 
   private sendRoomState(ws: WebSocket, viewer: PlayerSession | null): void {
-    const sessions = [...this.players.values()];
-    // Spectators have no seat, so they get seat 0 as "you" and seat 1 as "opponent".
-    // A cleaner protocol would send a viewer-independent players[] list.
+    const sessions = [...this.membersOf("A"), ...this.membersOf("B")];
+    // Spectators have no seat, so they get the first seat as "you". `opponent` is the
+    // first player on the other side from that — never a teammate, because a client
+    // that only knows these two fields reads "no opponent" as "this is a solo run", and
+    // for a player whose only company is a teammate that is the right answer.
     const you = viewer ?? sessions[0] ?? null;
-    const opp = viewer
-      ? sessions.find((s) => s.id !== viewer.id) ?? null
-      : sessions[1] ?? null;
+    const opp = you ? sessions.find((s) => s.side !== you.side) ?? null : null;
+    const players: RoomPlayer[] = sessions.map((s) => ({
+      ...toPlayerInfo(s),
+      worldOwner: s.side !== null && this.membersOf(s.side)[0]?.id === s.id,
+    }));
 
     this.bus.send(ws, {
       type: "room_state",
@@ -612,6 +856,7 @@ export class Room {
       origin: this.origin,
       you: you ? toPlayerInfo(you) : null,
       opponent: opp ? toPlayerInfo(opp) : null,
+      players,
       hostId: this.hostId,
       settings: this.settings,
     });
@@ -629,6 +874,8 @@ export class Room {
       claimed: [...this.engine.claimedLog],
       settings: this.settings,
       startsAt: this.engine.startedAt,
+      solo: this.solo,
+      world: viewer ? this.worldFor(viewer) : null,
     });
   }
 
@@ -663,6 +910,22 @@ export class Room {
     };
   }
 }
+
+/** One player's place in a shared team world. See [Room.worlds]. */
+interface TeamWorldSeat {
+  readonly role: "host" | "guest";
+  readonly link: RelayLink;
+  /** Whether the host has said the world is up and joinable. */
+  open: boolean;
+}
+
+/**
+ * How long a finished match's team links outlive it.
+ *
+ * Comfortably past the mod's result screen, after which every client has left its world
+ * by itself. Only a room that never plays again waits this out.
+ */
+const LINK_LINGER_MS = 60_000;
 
 export interface RoomSummary {
   code: string;

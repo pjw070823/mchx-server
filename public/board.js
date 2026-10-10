@@ -420,8 +420,20 @@ export function mountSpectator(container, roomCode, L, lang) {
       case "room_state":
         s.roomCode = msg.roomCode;
         s.status = msg.status;
-        if (msg.you) s.players[msg.you.side] = msg.you;
-        if (msg.opponent) s.players[msg.opponent.side] = msg.opponent;
+        if (Array.isArray(msg.players)) {
+          // 2대2에서는 한 진영이 두 명입니다. 화면은 진영마다 이름 하나를 그리므로 팀원
+          // 이름을 이어 붙여 한 줄로 만듭니다. 레이팅은 한 명일 때만 의미가 있습니다.
+          for (const side of ["A", "B"]) {
+            const team = msg.players.filter((p) => p.side === side);
+            s.players[side] = team.length === 0 ? null : {
+              name: team.map((p) => p.name).join(", "),
+              elo: team.length === 1 ? team[0].elo : null,
+            };
+          }
+        } else {
+          if (msg.you) s.players[msg.you.side] = msg.you;
+          if (msg.opponent) s.players[msg.opponent.side] = msg.opponent;
+        }
         draw(); return;
       case "match_start":
         s.status = "playing";

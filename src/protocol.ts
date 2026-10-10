@@ -10,13 +10,22 @@ import { z } from "zod";
  *
  * 1 — first versioned protocol; adds the `hello` handshake and account verification.
  * 2 — ranked queue: `join_queue`/`leave_queue`/`queue_state`, and `room_state.origin`.
+ * 3 — 2v2: `room_state.players`, `choose_team`, a shared team world reached through the
+ *     relay (`match_start.world`, `team_world_open`/`team_world_ready`, `relay_stream`).
  *
  * A v1 client is still served (see MIN_SUPPORTED_PROTOCOL); it simply never sends the
  * queue messages. The bump exists so `hello_ok.protocolVersion` works as a capability
  * signal — the mod greys out 랭크전 against an older server and says why, rather than
  * opening a queue screen that hangs on `bad_message`.
+ *
+ * A v2 client is served too, but not seated in a 2v2 room: told it is a guest in a
+ * teammate's world, it would ignore the part it does not know and generate a world of its
+ * own. See [TEAM_PROTOCOL].
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
+
+/** The first protocol whose clients can share a team world. */
+export const TEAM_PROTOCOL = 3;
 
 export const Difficulty = z.enum(["easy", "medium", "hard"]);
 export type Difficulty = z.infer<typeof Difficulty>;
@@ -35,6 +44,36 @@ export const PlayerInfo = z.object({
   elo: z.number().int().nullable(),
 });
 export type PlayerInfo = z.infer<typeof PlayerInfo>;
+
+/**
+ * One seat as the room screen draws it.
+ *
+ * `worldOwner` marks whose PC runs the team's world in a 2v2 match: the first player to
+ * sit on that side. It is told to everyone before the match because it is the one seat
+ * whose disconnect closes a world, and a team may want to pick who that is.
+ */
+export const RoomPlayer = PlayerInfo.extend({
+  worldOwner: z.boolean(),
+});
+export type RoomPlayer = z.infer<typeof RoomPlayer>;
+
+/**
+ * Where a player plays the match that is starting.
+ *
+ * `own` — a world of their own, as every 1v1 player has. `host` — the same, opened to one
+ * teammate through the relay. `guest` — no world of their own: they join the host's.
+ *
+ * `mates` are the other players allowed into this world, by Mojang-verified uuid where
+ * there is one. The host's game refuses a login from anyone else, which matters because
+ * opening a world to a teammate also opens the port to the local network.
+ */
+export const MatchWorld = z.object({
+  role: z.enum(["own", "host", "guest"]),
+  /** Presented to the relay to open a stream. Null for `own`. */
+  relayToken: z.string().nullable(),
+  mates: z.array(z.object({ uuid: z.string().nullable(), name: z.string() })),
+});
+export type MatchWorld = z.infer<typeof MatchWorld>;
 
 /**
  * What the players agreed to play.
@@ -172,6 +211,18 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("start_match"),
   }),
+  /** Move to the other team. Waiting rooms only, and only into a team with room. */
+  z.object({
+    type: z.literal("choose_team"),
+    side: Side,
+  }),
+  /**
+   * The team's world is up and open: the host's game is listening and a guest sent
+   * through the relay now will be let in. The server answers by telling the guest.
+   */
+  z.object({
+    type: z.literal("team_world_open"),
+  }),
   z.object({
     type: z.literal("world_ready"),
   }),
@@ -273,7 +324,16 @@ export const ServerMessage = z.discriminatedUnion("type", [
      */
     origin: RoomOriginSchema,
     you: PlayerInfo.nullable(),
+    /** The first player on the other side. Kept for clients that predate `players`. */
     opponent: PlayerInfo.nullable(),
+    /**
+     * Everyone seated, the same list whoever is asking.
+     *
+     * `you`/`opponent` describe a room of two from one seat's point of view, and a room
+     * of four has no such description — "the opponent" is two people and "you" has a
+     * teammate. Optional only on paper: this server always sends it.
+     */
+    players: z.array(RoomPlayer).optional(),
     hostId: z.string().nullable(),
     settings: RoomSettings,
   }),
@@ -289,6 +349,28 @@ export const ServerMessage = z.discriminatedUnion("type", [
     claimed: z.array(ClaimedTile),
     settings: RoomSettings,
     startsAt: z.number().int(),
+    /**
+     * Whether this match has only one side in it — a run against nobody.
+     *
+     * A client used to work this out from having no opponent, which stopped being the
+     * same thing when a side could hold two players: two friends on one team with the
+     * other team empty is a solo run with a teammate in it.
+     */
+    solo: z.boolean().optional(),
+    /** Null for spectators, who have no world. See [MatchWorld]. */
+    world: MatchWorld.nullable().optional(),
+  }),
+  /** To a guest: the host's world is open, connect now. */
+  z.object({
+    type: z.literal("team_world_ready"),
+  }),
+  /**
+   * To a host: a teammate has opened a stream at the relay and is waiting on it. The
+   * host's client answers by attaching its own end under the same id.
+   */
+  z.object({
+    type: z.literal("relay_stream"),
+    streamId: z.string(),
   }),
   z.object({
     type: z.literal("countdown_start"),

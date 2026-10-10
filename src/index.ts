@@ -13,6 +13,7 @@ import {
 } from "./handlers.js";
 import { Matchmaker } from "./matchmaker.js";
 import { remoteAddrOf } from "./remote-addr.js";
+import { relayHub } from "./relay.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,6 +35,21 @@ const MAX_WS_PAYLOAD = 8 * 1024;
 
 /** Concurrent sockets from one address. Two players plus spectators behind one NAT fits. */
 const MAX_CONNS_PER_IP = 10;
+
+/**
+ * Cap on one relayed frame. These carry a game connection's raw bytes in whatever pieces
+ * the sending client read them, and the mod reads at most 32 KiB at a time; this is that
+ * with room to spare, not a limit a real client approaches.
+ */
+const MAX_RELAY_PAYLOAD = 256 * 1024;
+
+/**
+ * Concurrent relay sockets from one address — counted apart from [MAX_CONNS_PER_IP],
+ * which a household of players and spectators can already come close to. A player has one
+ * of these while in a team world, two for the moment a rejoin overlaps the stream it
+ * replaces.
+ */
+const MAX_RELAY_CONNS_PER_IP = 8;
 
 /** Token bucket: short bursts are fine, sustained flooding is not. */
 const RATE_BUCKET_CAP = 60;
@@ -83,9 +99,11 @@ mountApiRoutes(spectatorApp, rooms);
 const httpServer = createServer(app);
 const spectatorHttpServer = createServer(spectatorApp);
 
+// Neither socket server is attached to the HTTP server directly. Two of them share one
+// path, and a server attached with `server:` answers every upgrade it does not want with
+// a 400 — so the second would never see a connection. The `upgrade` handler below routes.
 const wss = new WebSocketServer({
-  server: httpServer,
-  path: "/ws",
+  noServer: true,
   maxPayload: MAX_WS_PAYLOAD,
   verifyClient: (info, cb) => {
     // Reject cross-site WebSocket hijacking. The mod's Java HttpClient sends no Origin
@@ -105,6 +123,65 @@ const wss = new WebSocketServer({
       return cb(false, 400, "bad_origin");
     }
   },
+});
+
+/**
+ * The relay: a teammate's Minecraft connection, passed through. See relay.ts.
+ *
+ * Only ever opened by the mod, which sends no Origin, so anything that does is a web page
+ * and is turned away — there is nothing here a browser could legitimately want.
+ */
+const relayWss = new WebSocketServer({
+  noServer: true,
+  maxPayload: MAX_RELAY_PAYLOAD,
+  verifyClient: (info: { req: IncomingMessage }) => !info.req.headers.origin,
+});
+
+/**
+ * Both kinds of socket arrive at `/ws`; `?relay` picks the second.
+ *
+ * A query flag rather than a path of its own because the proxy in front of this forwards
+ * exactly one path to this port. A second path would have needed the proxy's config
+ * changed in step with a deploy, and a client told to use it before that happened would
+ * reach the static site instead. The flag carries no secret — the token goes in the
+ * first frame, which unlike the URL is not written to the proxy's access log.
+ */
+httpServer.on("upgrade", (req, socket, head) => {
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "/", "http://localhost");
+  } catch {
+    socket.destroy();
+    return;
+  }
+  if (url.pathname !== "/ws") {
+    socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+  const target = url.searchParams.has("relay") ? relayWss : wss;
+  target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
+});
+
+const relayConnsByIp = new Map<string, number>();
+
+relayWss.on("connection", (ws, req) => {
+  const remoteAddr = getRemoteAddr(req);
+  if (remoteAddr) {
+    const current = relayConnsByIp.get(remoteAddr) ?? 0;
+    if (current >= MAX_RELAY_CONNS_PER_IP) {
+      console.warn(`[relay] rejecting ${remoteAddr}: ${current} active streams >= cap`);
+      ws.close(1008, "too_many_connections");
+      return;
+    }
+    relayConnsByIp.set(remoteAddr, current + 1);
+    ws.once("close", () => {
+      const left = (relayConnsByIp.get(remoteAddr) ?? 1) - 1;
+      if (left <= 0) relayConnsByIp.delete(remoteAddr);
+      else relayConnsByIp.set(remoteAddr, left);
+    });
+  }
+  relayHub.accept(ws);
 });
 
 // --- connection lifecycle --------------------------------------------------------
