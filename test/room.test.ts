@@ -350,6 +350,8 @@ describe("Room — 2v2 worlds", () => {
     const { room } = teamMatch(4);
     assert.equal(relayHub.size, before + 2);
     room.forfeitMatch("p1");
+    room.forfeitMatch("p3");
+    assert.equal(room.status, "waiting");
     assert.equal(relayHub.size, before + 2, "the result is still on screen in those worlds");
     room.startMatchByHost("p1");
     assert.equal(relayHub.size, before + 2, "two closed, two opened");
@@ -368,11 +370,76 @@ describe("Room — 2v2 play", () => {
     assert.equal(seats[3]!.sock.last("match_end")?.winner, "A");
   });
 
-  it("is lost by the team whose player concedes", () => {
+  it("is conceded by a team only when both of its players say so", () => {
+    // One press used to end it for both, and the teammate found out from the result.
     const { room, seats } = teamMatch(4);
     assert.equal(room.forfeitMatch("p3"), true);
+    assert.equal(room.status, "playing", "one player asking is a request, not a result");
+    assert.equal(seats[0]!.sock.all("match_end").length, 0);
+
+    assert.equal(room.forfeitMatch("p1"), true);
     assert.equal(seats[0]!.sock.last("match_end")?.winner, "B");
+    assert.equal(seats[0]!.sock.last("match_end")?.reason, "forfeit");
     assert.equal(room.size(), 4, "and everybody is still seated for the next one");
+  });
+
+  it("tells the team who is asking to give up, and the other team nothing", () => {
+    const { room, seats } = teamMatch(4);
+    room.forfeitMatch("p3");
+    assert.deepEqual(seats[0]!.sock.last("forfeit_vote")?.voters, ["p3"]);
+    assert.deepEqual(seats[2]!.sock.last("forfeit_vote")?.voters, ["p3"], "the one who pressed is told too");
+    assert.equal(seats[1]!.sock.all("forfeit_vote").length, 0);
+    assert.equal(seats[3]!.sock.all("forfeit_vote").length, 0);
+  });
+
+  it("lets a request be taken back", () => {
+    const { room, seats } = teamMatch(4);
+    room.forfeitMatch("p3");
+    room.cancelForfeit("p3");
+    assert.deepEqual(seats[0]!.sock.last("forfeit_vote")?.voters, []);
+
+    room.forfeitMatch("p1");
+    assert.equal(room.status, "playing", "the withdrawn request no longer counts");
+    assert.deepEqual(seats[2]!.sock.last("forfeit_vote")?.voters, ["p1"]);
+  });
+
+  it("does not count one player asking twice as two", () => {
+    const { room } = teamMatch(4);
+    room.forfeitMatch("p3");
+    room.forfeitMatch("p3");
+    assert.equal(room.status, "playing");
+  });
+
+  it("does not carry a request over into the next match", () => {
+    const { room } = teamMatch(4);
+    room.forfeitMatch("p3");
+    room.forfeitMatch("p2");
+    room.forfeitMatch("p4"); // the other team concedes; p3's request dies with the match
+    assert.equal(room.status, "waiting");
+
+    room.startMatchByHost("p1");
+    room.forfeitMatch("p1");
+    assert.equal(room.status, "playing", "p3 has not asked in this match");
+  });
+
+  it("reminds a reconnecting player that their teammate is waiting on them", () => {
+    const { room } = teamRoom(1, { ...FAST, reconnectGraceMs: 500 });
+    seat(room, "p2", "Bob", VERIFIED.b);
+    room.chooseTeam("p2", "A");
+    room.startMatchByHost("p1");
+    room.removePlayer("p2");
+    room.forfeitMatch("p1");
+
+    const back = new FakeWs();
+    room.reconnectPlayer("p2", back.ws, null);
+    room.sendReconnectSnapshot("p2");
+    assert.deepEqual(back.last("forfeit_vote")?.voters, ["p1"]);
+  });
+
+  it("still lets a player with no teammate concede alone", () => {
+    const { room, seats } = teamMatch(3);
+    room.forfeitMatch("p2"); // alone on B
+    assert.equal(seats[0]!.sock.last("match_end")?.winner, "A");
   });
 
   it("is lost by the team whose player leaves — not handed to their teammate", () => {
@@ -411,6 +478,7 @@ describe("Room — 2v2 play", () => {
     room.markReady("p1");
     room.markReady("p2");
     room.forfeitMatch("p2");
+    room.forfeitMatch("p1");
     assert.equal(seats[0]!.sock.last("match_end")?.winner, null, "there is nobody to hand it to");
   });
 
@@ -418,6 +486,7 @@ describe("Room — 2v2 play", () => {
     const { getAllMatches } = await import("../src/db.js");
     const { room } = teamMatch(4);
     room.forfeitMatch("p2");
+    room.forfeitMatch("p4");
     const row = getAllMatches(1, 0)[0]!;
     assert.equal(row.player_a_name, "Alice, Carol");
     assert.equal(row.player_b_name, "Bob, Dave");

@@ -204,6 +204,17 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("forfeit"),
   }),
+  /**
+   * Take back a `forfeit` that is still waiting on a teammate.
+   *
+   * Only means anything in a team: there, one player's `forfeit` is a request, and the
+   * match ends when the other makes it too. A message of its own rather than a second
+   * `forfeit` toggling the first, so that a press which races the teammate's cannot be
+   * read as the opposite of what the player meant.
+   */
+  z.object({
+    type: z.literal("forfeit_cancel"),
+  }),
   z.object({
     type: z.literal("update_settings"),
     settings: RoomSettings.partial(),
@@ -359,6 +370,17 @@ export const ServerMessage = z.discriminatedUnion("type", [
     solo: z.boolean().optional(),
     /** Null for spectators, who have no world. See [MatchWorld]. */
     world: MatchWorld.nullable().optional(),
+  }),
+  /**
+   * To one team only: which of its players are currently asking to give up.
+   *
+   * Sent whenever that changes, to every member of the team including the one who
+   * pressed — the button on their pause menu follows this, not their own click. The
+   * other team is told nothing until the team has actually conceded.
+   */
+  z.object({
+    type: z.literal("forfeit_vote"),
+    voters: z.array(z.string()),
   }),
   /** To a guest: the host's world is open, connect now. */
   z.object({

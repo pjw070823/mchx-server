@@ -137,6 +137,11 @@ export function handleClientMessage(
       return;
     }
 
+    case "forfeit_cancel": {
+      if (!state.room || state.isSpectator) return;
+      return state.room.cancelForfeit(state.playerId);
+    }
+
     case "claim": {
       if (!state.room || state.isSpectator) return sendError(ws, "no_match", "not in a match");
       return state.room.attemptClaim(state.playerId, msg.tileId, msg.missionId);

@@ -101,6 +101,14 @@ export class Room {
   /** Closes the last match's links once its players have had time to leave the world. */
   private linkTimer: NodeJS.Timeout | null = null;
 
+  /**
+   * Players who have asked to give up and are waiting on their teammate.
+   *
+   * A team concedes together or not at all. One player pressing the button used to end
+   * the match for both, and the other found out from the result screen.
+   */
+  private readonly forfeitVotes = new Set<string>();
+
   constructor(config: Partial<RoomConfig> = {}, origin: RoomOrigin = "custom") {
     this.code = newRoomCode();
     this.origin = origin;
@@ -348,12 +356,43 @@ export class Room {
     const quitter = this.players.get(playerId);
     if (!quitter || !quitter.side) return false;
 
+    // With a teammate, this is a request, and it takes both. Asked of whoever is seated
+    // on the side now, which mid-match is whoever started on it: a seat only empties by
+    // ending the match.
+    const team = this.membersOf(quitter.side);
+    if (team.length > 1) {
+      if (!this.forfeitVotes.has(playerId)) {
+        this.forfeitVotes.add(playerId);
+        if (!team.every((p) => this.forfeitVotes.has(p.id))) {
+          this.sendForfeitVotes(quitter.side);
+          return true;
+        }
+      } else if (!team.every((p) => this.forfeitVotes.has(p.id))) {
+        return true; // already asked, still waiting
+      }
+    }
+
     // Conceding hands the match to the other side — when there is one. A solo run has
     // nobody to hand it to, and naming the empty side the winner would put a result in
     // the archive that says an absent player won.
     const winner: Side | null = this.solo ? null : quitter.side === "A" ? "B" : "A";
     this.endMatch(winner, "forfeit", null);
     return true;
+  }
+
+  /** Withdraw a request to give up that the teammate has not yet joined. */
+  cancelForfeit(playerId: string): void {
+    if (this.status !== "playing") return;
+    const player = this.players.get(playerId);
+    if (!player || !player.side) return;
+    if (this.forfeitVotes.delete(playerId)) this.sendForfeitVotes(player.side);
+  }
+
+  /** Tell one team — and nobody else — who on it is asking to give up. */
+  private sendForfeitVotes(side: Side): void {
+    const team = this.membersOf(side);
+    const voters = team.filter((p) => this.forfeitVotes.has(p.id)).map((p) => p.id);
+    for (const p of team) this.bus.send(p.ws, { type: "forfeit_vote", voters });
   }
 
   /**
@@ -526,6 +565,7 @@ export class Room {
     // One side with nobody on it, not one player in the room: two teammates with the
     // other team empty have no opponent either.
     this.solo = this.membersOf("A").length === 0 || this.membersOf("B").length === 0;
+    this.forfeitVotes.clear();
     this.assignWorlds();
     this.matchSettled = false;
     this.endedAt = null;
@@ -719,6 +759,7 @@ export class Room {
     quitter: PlayerSession | null,
   ): void {
     this.clearReadyTimeout();
+    this.forfeitVotes.clear();
     const eloChanges = this.matchSettled ? {} : this.settle(winnerSide, reason, quitter);
     this.matchSettled = true;
     this.status = "ended";
@@ -805,6 +846,9 @@ export class Room {
       this.sendCountdownIfArmed(session.ws);
       const seat = this.worlds.get(playerId);
       if (seat?.role === "guest" && seat.open) this.bus.send(session.ws, { type: "team_world_ready" });
+      // A request made while this player was away is still standing, and they are the
+      // one it is waiting on.
+      if (session.side && this.forfeitVotes.size > 0) this.sendForfeitVotes(session.side);
     }
   }
 
