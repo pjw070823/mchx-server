@@ -12,6 +12,7 @@ import {
   handleClientMessage, handleClose, sendError, type ConnState, type ServerDeps,
 } from "./handlers.js";
 import { Matchmaker } from "./matchmaker.js";
+import { remoteAddrOf } from "./remote-addr.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -129,10 +130,9 @@ function consumeToken(state: ConnState, cost = 1): boolean {
 }
 
 function getRemoteAddr(req: IncomingMessage): string | null {
-  // Read the socket directly — there is no reverse proxy in front of us today. Behind
-  // nginx this must become a verified X-Forwarded-For parse with a trusted-proxy list,
-  // otherwise the per-IP limits and the same-IP self-play guard both become spoofable.
-  return req.socket.remoteAddress ?? null;
+  // Not the socket's peer on its own: behind Caddy that is loopback for every player.
+  // See remote-addr.ts for what is believed, from whom, and what broke when it was not.
+  return remoteAddrOf(req.socket.remoteAddress, req.headers["x-forwarded-for"]);
 }
 
 wss.on("connection", (ws, req) => {
