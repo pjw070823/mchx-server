@@ -95,6 +95,20 @@ export const DOWNLOAD: Download | null = {
   sizeBytes: 1571897,
 };
 
+/**
+ * The modpack for [LATEST]: one file a launcher imports to get Minecraft, the loader,
+ * the mods we depend on and our own jar in a single step.
+ *
+ * Derived from [LATEST] rather than written out, so that bumping the version without
+ * building the pack is a failing test and not an install page pointing at nothing —
+ * `download.test.ts` checks that the file is there and that the jar inside it is the
+ * one [DOWNLOAD] describes. Build it with `python deploy/make-modpack.py`.
+ *
+ * Not part of [releaseInfo]: that object is also what `hello_ok` carries to the mod, and
+ * the mod has no use for it. Only the install page asks.
+ */
+export const PACK_URL = `https://mc-hex.com/downloads/mchx-${LATEST}.mrpack`;
+
 /** What the client is told about the newest build. */
 export interface ReleaseInfo {
   readonly version: string;

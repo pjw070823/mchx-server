@@ -15,7 +15,7 @@ import {
   getRecentMatches,
   searchPlayersByName,
 } from "./db.js";
-import { releaseInfo } from "./release.js";
+import { PACK_URL, releaseInfo } from "./release.js";
 
 /** Shape of a Minecraft account id, enforced before anything reaches the database. */
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -47,7 +47,7 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
    * now read the same constant.
    */
   target.get("/api/release", (_req, res) => {
-    res.json(releaseInfo());
+    res.json({ ...releaseInfo(), packUrl: PACK_URL });
   });
 
   target.get("/api/rating/:uuid", (req, res) => {

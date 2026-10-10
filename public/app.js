@@ -14,7 +14,6 @@ const state = {
   page: "home",
   lang: localStorage.getItem("mchx.lang") || "ko",
   spectate: null,
-  os: detectOs(),
   codeInput: "",
   codeError: false,
   rooms: [],
@@ -29,13 +28,6 @@ const state = {
   // 페이지 소스에 버전을 박아두면 사이트와 서버가 서로 다른 빌드를 말하게 됩니다.
   release: null,
 };
-
-function detectOs() {
-  const p = navigator.platform || "";
-  if (/Mac/i.test(p)) return "mac";
-  if (/Linux/i.test(p) && !/Android/i.test(navigator.userAgent)) return "linux";
-  return "win";
-}
 
 /* ------------------------------------------------------------------- 문구 */
 
@@ -74,8 +66,6 @@ const T = {
     dlP: "모드는 직접 플레이할 때만 필요합니다. 라이브는 아무것도 깔지 않아도 볼 수 있습니다.",
     relLine: "패브릭 · 마인크래프트 26.3",
     dlJar: "jar 내려받기", changelog: "커밋 기록", dlSize: "MB",
-    requires: "필요한 것", notRequired: "필요 없는 것",
-    nr1: "따로 돌릴 서버", nr2: "별도 계정 — 마인크래프트 계정으로 인증합니다", nr3: "라이브 시청용 설치",
     footer: "MINECRAFT HEX · 유저 제작 프로젝트 · MOJANG 과 무관합니다",
     stepsTitle: "설치 순서",
   },
@@ -113,8 +103,6 @@ const T = {
     dlP: "You only need the mod to play. Watching boards on this site needs nothing installed.",
     relLine: "Fabric · Minecraft 26.3",
     dlJar: "Download jar", changelog: "Commits", dlSize: "MB",
-    requires: "REQUIRES", notRequired: "NOT REQUIRED",
-    nr1: "A server to host", nr2: "A separate account — your Minecraft account signs you in", nr3: "Anything installed to watch",
     stepsTitle: "INSTALL STEPS",
     footer: "MINECRAFT HEX · COMMUNITY PROJECT · NOT AFFILIATED WITH MOJANG",
   },
@@ -122,72 +110,36 @@ const T = {
 const t = () => T[state.lang];
 
 /**
- * 설치 순서, Prism Launcher 기준.
+ * 설치 순서. 모드팩 하나를 Prism Launcher 로 불러오는 것이 전부입니다.
  *
- * 이전에는 패브릭 인스톨러를 직접 돌리고 jar 세 개를 mods 폴더에 넣게 했습니다. Prism
- * 이 그 셋을 다 흡수합니다 — 로더는 인스턴스를 만들 때 고르고, 의존 모드는 런처 안에서
- * 검색해 받고, 인스턴스는 바닐라 프로필과 분리돼 있어 원래 하던 마인크래프트를 건드리지
- * 않습니다. 마지막이 특히 중요합니다: 자동 업데이트가 mods 폴더를 직접 고치는데, 그
- * 폴더가 이 게임 전용이면 잘못될 것이 없습니다.
+ * 전에는 OS 별로 여섯 단계였습니다 — 인스턴스를 만들고, 로더를 고르고, 의존 모드 두
+ * 개를 검색해 받고, jar 을 넣고. 그 넷을 팩이 한 번에 합니다: 마인크래프트 버전과
+ * Fabric 로더는 팩에 적혀 있고, 의존 모드는 런처가 Modrinth 에서 직접 받고, mchx jar 은
+ * 팩 안에 들어 있습니다. 마인크래프트 버전을 옮길 때(26.1.2 → 26.3) 기존 사용자에게
+ * 여섯 단계를 다시 시키게 된 것이 바꾼 계기입니다.
  *
- * OS 탭이 남아 있는 이유는 01 뿐입니다. Prism 을 깔고 나면 화면이 셋 다 같습니다.
+ * OS 탭도 같이 없앴습니다. 탭이 달랐던 것은 Prism 을 까는 01 뿐이었고, 그 뒤 화면은
+ * 셋 다 같습니다.
+ *
+ * 팩 주소는 서버가 줍니다(`/api/release` 의 `packUrl`). 페이지에 박아 두면 릴리스 때마다
+ * 낡은 팩을 가리키게 됩니다.
  *
  * 서버 주소를 바꾸는 항목은 없습니다. 공식 서버 말고 다른 곳에 붙는 사람은 자기
  * 서버를 띄운 사람뿐이고, 그 사람에게는 설치 안내가 필요하지 않습니다.
  */
-const OS_STEPS = {
-  ko: {
-    win: [
-      { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 Windows 설치 파일을 받아 실행하고, 처음 켤 때 마인크래프트 계정으로 로그인합니다." },
-      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.3 를 고르고, 모드 로더에서 Fabric 을 선택합니다. 이름은 아무거나 좋습니다." },
-      { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 검색해 추가합니다. 둘 중 하나라도 없으면 모드가 로드되지 않습니다." },
-      { n: "04", title: "mchx 넣기", body: "위에서 받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다. 인스턴스 창에 끌어다 놓아도 됩니다." },
-      { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다. 안 뜨면 03 을 다시 확인해 주세요." },
-      { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다. 다시 켜면 최신입니다. 이 페이지를 다시 찾아오실 필요는 없습니다." },
-    ],
-    mac: [
-      { n: "01", title: "Prism Launcher 설치", body: "공식 사이트에서 macOS 빌드를 받아 응용 프로그램에 옮깁니다. 처음 실행이 막히면 우클릭 후 열기를 한 번만 해 주면 됩니다." },
-      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.3 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
-      { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 추가합니다." },
-      { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
-      { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
-      { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
-    ],
-    linux: [
-      { n: "01", title: "Prism Launcher 설치", body: "배포판 패키지나 Flatpak 으로 깔면 됩니다. AppImage 도 그대로 동작합니다.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
-      { n: "02", title: "인스턴스 만들기", body: "인스턴스 추가 → 버전 26.3 를 고르고, 모드 로더에서 Fabric 을 선택합니다." },
-      { n: "03", title: "의존 모드 두 개 받기", body: "인스턴스 편집 → 모드 → 모드 내려받기 에서 Fabric API 와 Fabric Language Kotlin 을 추가합니다." },
-      { n: "04", title: "mchx 넣기", body: "받은 jar 을 인스턴스 편집 → 모드 → 파일 추가 로 넣습니다." },
-      { n: "05", title: "실행", body: "인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
-      { n: "06", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다." },
-    ],
-  },
-  en: {
-    win: [
-      { n: "01", title: "Install Prism Launcher", body: "Grab the Windows installer from the official site and sign in with your Minecraft account on first run." },
-      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.3, then choose Fabric as the mod loader. Name it whatever you like." },
-      { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — search for Fabric API and Fabric Language Kotlin. The mod will not load without them." },
-      { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above. Dragging it onto the instance works too." },
-      { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away. If it doesn't, check step 03." },
-      { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game. Start it again and you are current. You will not need this page twice." },
-    ],
-    mac: [
-      { n: "01", title: "Install Prism Launcher", body: "Download the macOS build and move it to Applications. If Gatekeeper blocks the first run, right-click and Open once." },
-      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.3, then choose Fabric as the mod loader." },
-      { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — add Fabric API and Fabric Language Kotlin." },
-      { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
-      { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
-      { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
-    ],
-    linux: [
-      { n: "01", title: "Install Prism Launcher", body: "Your distro package or Flatpak both work, as does the AppImage.", cmd: "flatpak install flathub org.prismlauncher.PrismLauncher" },
-      { n: "02", title: "Create an instance", body: "Add Instance, pick version 26.3, then choose Fabric as the mod loader." },
-      { n: "03", title: "Get both dependencies", body: "Edit Instance, Mods, Download Mods — add Fabric API and Fabric Language Kotlin." },
-      { n: "04", title: "Add mchx", body: "Edit Instance, Mods, Add File, and pick the jar from above." },
-      { n: "05", title: "Launch", body: "Run the instance and the HEX lobby opens straight away." },
-      { n: "06", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game." },
-    ],
-  },
+const STEPS = {
+  ko: [
+    { n: "01", title: "Prism Launcher 설치", body: "공식 사이트(prismlauncher.org)에서 받아 설치하고, 처음 켤 때 마인크래프트 계정으로 로그인합니다." },
+    { n: "02", title: "모드팩 불러오기", body: "인스턴스 추가 → 불러오기 를 열고, 아래 주소를 붙여 넣은 뒤 확인을 누릅니다. 마인크래프트 26.3 과 Fabric, 필요한 모드가 한 번에 설치됩니다.", pack: true },
+    { n: "03", title: "실행", body: "만들어진 인스턴스를 실행하면 HEX 로비가 바로 뜹니다." },
+    { n: "04", title: "업데이트는 알아서 됩니다", body: "새 버전이 나오면 로비가 알려주고, 눌러주시면 받아서 설치한 뒤 게임을 닫습니다. 다시 켜면 최신입니다. 이 페이지를 다시 찾아오실 필요는 없습니다." },
+  ],
+  en: [
+    { n: "01", title: "Install Prism Launcher", body: "Get it from the official site (prismlauncher.org) and sign in with your Minecraft account on first run." },
+    { n: "02", title: "Import the modpack", body: "Open Add Instance, then Import, paste the address below and press OK. Minecraft 26.3, Fabric and every mod you need are installed in one go.", pack: true },
+    { n: "03", title: "Launch", body: "Run the new instance and the HEX lobby opens straight away." },
+    { n: "04", title: "Updates handle themselves", body: "When a new build ships the lobby says so; one click downloads it, installs it and closes the game. Start it again and you are current. You will not need this page twice." },
+  ],
 };
 
 
@@ -559,8 +511,9 @@ function dlMeta(L) {
 
 function pageInstall() {
   const L = t();
-  const steps = OS_STEPS[state.lang][state.os];
-  const tab = (id, label) => `<button data-os="${id}" class="${state.os === id ? "on" : ""}">${label}</button>`;
+  const steps = STEPS[state.lang];
+  // 릴리스 정보가 아직 안 왔거나 못 받았으면 주소 칸만 비웁니다. 나머지 순서는 그대로 읽힙니다.
+  const packUrl = state.release?.packUrl ?? "";
   return `
     <div class="wrap wrap-narrow">
       <div class="kick">${L.kInstall}</div>
@@ -580,8 +533,6 @@ function pageInstall() {
         </div>
       </div>
 
-      <div class="os-tabs">${tab("win", "WINDOWS")}${tab("mac", "MACOS")}${tab("linux", "LINUX")}</div>
-
       <div class="steps">
         <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.stepsTitle}</div>
         <div class="steps-list">
@@ -591,30 +542,13 @@ function pageInstall() {
               <div class="bd">
                 <div class="ti">${escapeHtml(s.title)}</div>
                 <div class="tx">${escapeHtml(s.body)}</div>
-                ${s.cmd ? `<div class="cmd">${escapeHtml(s.cmd)}</div>` : ""}
+                ${s.pack && packUrl ? `<div class="cmd">${escapeHtml(packUrl)}</div>` : ""}
               </div>
             </div>`).join("")}
         </div>
       </div>
-
-      <div class="req">
-        <div>
-          <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.requires}</div>
-          <div class="bd">Prism Launcher<br />Minecraft 26.3<br />Fabric API<br />Fabric Language Kotlin 1.13+</div>
-        </div>
-        <div>
-          <div class="kick" style="font-size:10.5px;letter-spacing:.16em">${L.notRequired}</div>
-          <div class="bd">${L.nr1}<br />${L.nr2}<br />${L.nr3}</div>
-        </div>
-      </div>
     </div>
   `;
-}
-
-function wireInstall() {
-  document.querySelectorAll(".os-tabs button").forEach((b) =>
-    b.addEventListener("click", () => { state.os = b.dataset.os; route(); }),
-  );
 }
 
 /* ------------------------------------------------------------------ 라우터 */
@@ -720,12 +654,11 @@ async function route() {
   if (hash === "#/install") {
     state.page = "install";
     render(pageInstall());
-    wireInstall();
     // 먼저 그리고 나서 받습니다. 실패해도 설치 단계는 그대로 읽을 수 있고,
     // 버전 줄만 "—" 로 남습니다.
     if (!state.release) {
       state.release = await api("/api/release").catch(() => null);
-      if (state.page === "install") { render(pageInstall()); wireInstall(); }
+      if (state.page === "install") render(pageInstall());
     }
     return;
   }

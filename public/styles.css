@@ -482,15 +482,7 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 }
 .dl-btns { display: flex; flex-wrap: wrap; gap: 10px; }
 
-.os-tabs { margin-top: 38px; display: flex; flex-wrap: wrap; gap: 2px; }
-.os-tabs button {
-  padding: 11px 20px; border: 1px solid #262b33; background: #111419;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 11.5px; letter-spacing: 0.1em; color: #8a929e; cursor: pointer;
-}
-.os-tabs button.on { border-color: #4a7bfa; color: #4a7bfa; }
-
-.steps { margin-top: 22px; border: 1px solid #1e232b; background: #0e1116; padding: 32px clamp(20px, 2.6vw, 34px); }
+.steps { margin-top: 38px; border: 1px solid #1e232b; background: #0e1116; padding: 32px clamp(20px, 2.6vw, 34px); }
 .steps-list { margin-top: 22px; display: flex; flex-direction: column; gap: 20px; }
 .step { display: flex; gap: 18px; align-items: flex-start; }
 .step .n {
@@ -506,13 +498,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   font-size: 12.5px; color: #9fb4ff; overflow-x: auto; white-space: pre-wrap; word-break: break-all;
 }
 
-.req {
-  margin-top: 22px; display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  gap: 1px; background: #1e232b; border: 1px solid #1e232b;
-}
-.req > div { background: #0e1116; padding: 26px 30px; }
-.req .bd { margin-top: 12px; font-size: 14px; line-height: 1.75; color: #b4bbc5; word-break: keep-all; }
 
 /* ------------------------------------------------------------------ 푸터 */
 
