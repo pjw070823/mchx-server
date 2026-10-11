@@ -5,6 +5,7 @@
 // 지어내지 않고 실제로 계산되는 것만 보여줍니다.
 
 import { mountSpectator, mountReplay, escapeHtml, mmss } from "/board.js";
+import { guidePage, guideSection, mountGuide } from "/guide.js";
 
 const app = document.getElementById("app");
 
@@ -24,6 +25,8 @@ const state = {
   // 1-based, per list. Reset on route entry, moved only by the pager.
   pages: { live: 1, replays: 1, ranks: 1 },
   stats: { pool: "—", players: "—", matches: "—" },
+  // 가이드에서 보고 있는 쪽의 id. 쪽이 바뀌었는지 알아야 스크롤을 올릴지 정할 수 있습니다.
+  guide: null,
   // 설치 페이지가 광고할 빌드. 서버가 접속을 허용하는 그 값과 같은 곳에서 옵니다 —
   // 페이지 소스에 버전을 박아두면 사이트와 서버가 서로 다른 빌드를 말하게 됩니다.
   release: null,
@@ -33,7 +36,8 @@ const state = {
 
 const T = {
   ko: {
-    nav1: "소개", nav3: "라이브", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
+    nav1: "소개", nav2: "가이드", nav3: "라이브", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
+    guideMore: "규칙과 미션 전체 보기 →",
     ctaWatch: "라이브 보러 가기", ctaDl: "모드 내려받기",
     statPool: "전체 목표", statPlayers: "등록 플레이어", statPlayed: "누적 판수",
     rulesKicker: "규칙", rulesH: "목표 25개짜리 판 하나, 먼저 잇는 쪽이 이깁니다.",
@@ -70,7 +74,8 @@ const T = {
     stepsTitle: "설치 순서",
   },
   en: {
-    nav1: "Overview", nav3: "Live", nav4: "Ranks", nav5: "Install", getMod: "Get the mod",
+    nav1: "Overview", nav2: "Guide", nav3: "Live", nav4: "Ranks", nav5: "Install", getMod: "Get the mod",
+    guideMore: "Full rules and every mission →",
     ctaWatch: "Watch a live match", ctaDl: "Get the client mod",
     statPool: "OBJECTIVE POOL", statPlayers: "RATED PLAYERS", statPlayed: "MATCHES PLAYED",
     rulesKicker: "THE RULES", rulesH: "Twenty-five objectives, one board, two edges to link.",
@@ -176,6 +181,7 @@ function header() {
       </a>
       <nav class="hdr-nav">
         <a href="#/"${on("home") ? ' class="on"' : ""}>${L.nav1}</a>
+        <a href="#/guide"${on("guide") ? ' class="on"' : ""}>${L.nav2}</a>
         <a href="#/live"${on("live") || on("spectate") ? ' class="on"' : ""}>${L.nav3}</a>
         <a href="#/replays"${on("replays") || on("replay") ? ' class="on"' : ""}>${L.nav6}</a>
         <a href="#/ranks"${on("ranks") ? ' class="on"' : ""}>${L.nav4}</a>
@@ -261,6 +267,7 @@ function pageHome() {
         <div class="rule"><i>01</i><p>${L.r1}</p></div>
         <div class="rule"><i>02</i><p>${L.r2}</p></div>
         <div class="rule"><i>03</i><p>${L.r3}</p></div>
+        <a class="rules-more" href="#/guide">${L.guideMore}</a>
       </div>
     </div>
   `;
@@ -640,6 +647,19 @@ async function route() {
     state.page = "replay";
     render(`<div class="wrap wrap-wide" id="rep"></div>`);
     cleanup = mountReplay(document.getElementById("rep"), replay[1], t(), state.lang);
+    return;
+  }
+
+  // 가이드는 쪽마다 주소가 있습니다(#/guide, #/guide/missions …). 모르는 쪽 이름은 첫 쪽으로.
+  const guide = hash.match(/^#\/guide(?:\/([a-z]*))?$/);
+  if (guide) {
+    const section = guideSection(guide[1]);
+    // 쪽을 넘기면 위에서부터 읽습니다. 언어만 바꾼 것이면(같은 쪽) 자리를 지킵니다.
+    if (state.page !== "guide" || state.guide !== section.id) window.scrollTo({ top: 0, behavior: "instant" });
+    state.page = "guide";
+    state.guide = section.id;
+    render(guidePage(section.id, state.lang));
+    cleanup = mountGuide(app, section.id, state.lang);
     return;
   }
 

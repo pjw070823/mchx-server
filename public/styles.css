@@ -499,6 +499,177 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 }
 
 
+/* ---------------------------------------------------------------- 가이드 */
+
+/* 규칙 세 줄 아래의 "전체 보기". 규칙 문단과 같은 열에 맞춥니다(번호 폭 + 틈). */
+.rules-more {
+  margin-left: 30px;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 12px; letter-spacing: 0.06em; word-break: keep-all;
+}
+
+.guide {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 36px clamp(28px, 4vw, 64px);
+  align-items: start;
+}
+.g-nav { position: sticky; top: 92px; }
+.g-nav-list { margin-top: 16px; display: flex; flex-direction: column; border-left: 1px solid #1e232b; }
+.g-nav-list a {
+  display: flex; gap: 12px; align-items: baseline;
+  padding: 10px 0 10px 16px; margin-left: -1px; border-left: 1px solid transparent;
+  font-size: 14px; font-weight: 600; color: #8a929e; word-break: keep-all;
+}
+.g-nav-list a i {
+  font-style: normal; flex-shrink: 0;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 10.5px; color: #4c545f;
+}
+.g-nav-list a:hover { color: #e9ecf1; }
+.g-nav-list a.on { color: #fff; border-left-color: #4a7bfa; }
+.g-nav-list a.on i { color: #4a7bfa; }
+
+.g-body { min-width: 0; max-width: 780px; }
+.g-body > .h-lg { margin-top: 12px; margin-bottom: 26px; }
+.g-h {
+  margin: 44px 0 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
+  color: #e9ecf1; word-break: keep-all;
+}
+.g-p { margin: 14px 0 0; font-size: 15.5px; line-height: 1.75; color: #b4bbc5; word-break: keep-all; }
+.g-body b { color: #e9ecf1; font-weight: 700; }
+.g-body code {
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 0.88em; padding: 2px 6px; background: #181c23; border: 1px solid #262b33; color: #9fb4ff;
+}
+.g-ul { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.g-ul li {
+  position: relative; padding-left: 20px;
+  font-size: 15px; line-height: 1.7; color: #b4bbc5; word-break: keep-all;
+}
+.g-ul li::before {
+  content: ""; position: absolute; left: 2px; top: 0.72em;
+  width: 7px; height: 8px; background: #333a44;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+.g-note {
+  margin-top: 22px; padding: 16px 20px;
+  background: #0f1228; border: 1px solid #2e3778;
+  font-size: 14.5px; line-height: 1.7; color: #bcc9ff; word-break: keep-all;
+}
+.g-note b { color: #fff; }
+.g-note a { color: #9fb4ff; text-decoration: underline; }
+
+.g-table-hold { margin-top: 18px; overflow-x: auto; border: 1px solid #1e232b; background: #0e1116; }
+.g-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
+.g-table th {
+  padding: 12px 16px; text-align: left; white-space: nowrap;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em; color: #6b7380;
+  border-bottom: 1px solid #1e232b;
+}
+.g-table td { padding: 13px 16px; vertical-align: top; color: #b4bbc5; border-bottom: 1px solid #171b21; word-break: keep-all; }
+.g-table tr:last-child td { border-bottom: 0; }
+.g-table td:first-child { color: #e9ecf1; font-weight: 600; white-space: nowrap; }
+.g-table.wide { min-width: 640px; }
+.g-sw {
+  display: inline-block; width: 11px; height: 13px; margin-right: 8px; vertical-align: -2px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+/* 설명용 판. 관전 보드의 칸 규칙을 그대로 쓰고 크기만 줄입니다. 여기는 컨테이너 질의
+   대상이 없어서 cqi 대신 vw 로 폭을 잡습니다 — 판 폭은 칸 너비의 약 8배입니다. */
+.g-fig { margin: 24px 0 0; border: 1px solid #1e232b; background: #0e1116; }
+.g-fig figcaption {
+  padding: 13px 18px; border-top: 1px solid #1e232b;
+  font-size: 13px; line-height: 1.6; color: #8a929e; word-break: keep-all;
+}
+.board-hold.g-board { --w: clamp(34px, 9vw, 56px); margin: 0; padding: calc(var(--w) * 0.62) calc(var(--w) * 0.4); }
+.board-hold.g-board .hcell { cursor: default; }
+.board-hold.g-board .hcell > i { font-size: max(8px, calc(var(--w) * 0.19)); font-weight: 700; letter-spacing: 0; }
+
+/* 미션 목록 */
+.g-tools { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.g-filter { display: flex; border: 1px solid #262b33; }
+.g-filter button {
+  padding: 11px 15px; border: 0; background: transparent; cursor: pointer; white-space: nowrap;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 11.5px; letter-spacing: 0.08em; color: #8a929e;
+}
+.g-filter button:hover { color: #e9ecf1; }
+.g-filter button.on { background: #e9ecf1; color: #0b0d10; }
+.g-search {
+  flex: 1 1 200px; min-width: 0; padding: 11px 14px;
+  background: #14181e; border: 1px solid #262b33; color: #e9ecf1; outline: none;
+  font-family: inherit; font-size: 14px;
+}
+.g-search:focus { border-color: #4a7bfa; }
+.g-search::placeholder { color: #5c646f; }
+
+.g-tier { margin-top: 30px; }
+.g-tier-h { display: flex; align-items: center; gap: 10px; }
+.g-tier-n { font-family: "JetBrains Mono", "Noto Sans KR", monospace; font-size: 11.5px; color: #6b7380; }
+.g-ms { margin-top: 12px; display: flex; flex-direction: column; gap: 1px; background: #1e232b; border: 1px solid #1e232b; }
+.g-m { display: flex; gap: 18px; align-items: flex-start; padding: 18px 20px; background: #0e1116; }
+.g-m[hidden], .g-tier[hidden] { display: none; }
+.g-m-bd { flex: 1; min-width: 0; }
+.g-m-nm { font-size: 16px; font-weight: 700; color: #e9ecf1; word-break: keep-all; }
+.g-m-sub { display: block; margin-top: 3px; font-size: 12.5px; font-weight: 500; color: #6b7380; }
+.g-m-tx { margin-top: 7px; font-size: 14px; line-height: 1.7; color: #9aa2ad; word-break: keep-all; }
+.g-m-chips { margin-top: 11px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+.g-chip {
+  display: inline-block; padding: 4px 9px; border: 1px solid #262b33; background: #181c23;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 10.5px; letter-spacing: 0.06em; color: #8a929e; white-space: nowrap;
+}
+.g-chip.easy { color: #8fd8bc; border-color: #2f6b57; background: #143027; }
+.g-chip.medium { color: #f0cc78; border-color: #8a6a22; background: #33270f; }
+.g-chip.hard { color: #f3a39c; border-color: #9a3f3a; background: #3a1614; }
+.g-chip.team { color: #9fb4ff; border-color: #2e3778; background: #0f1228; }
+
+/* 아이콘 창은 48px 로 고정합니다. 정수 크기라 스트립을 `steps()` 로 넘길 때 프레임마다
+   자리가 정확히 48px 씩 떨어지고, 관전 보드처럼 따로 못박을 필요가 없습니다. */
+.g-mi {
+  flex: none; width: 48px; height: 48px; overflow: hidden; position: relative;
+  background: #161a20; box-shadow: inset 0 0 0 1px #252a32;
+}
+.g-mi img {
+  position: absolute; top: 0; left: 0; width: 48px; height: auto; display: block;
+  image-rendering: pixelated;
+}
+.g-mi.none::after {
+  content: ""; position: absolute; inset: 15px 16px;
+  background: #252a32;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.g-pn { margin-top: 64px; padding-top: 24px; border-top: 1px solid #1e232b; display: flex; justify-content: space-between; gap: 16px; }
+.g-pn-a { display: flex; flex-direction: column; gap: 6px; color: #e9ecf1; }
+.g-pn-a.next { text-align: right; margin-left: auto; }
+.g-pn-a span { font-family: "JetBrains Mono", "Noto Sans KR", monospace; font-size: 11px; letter-spacing: 0.1em; color: #6b7380; }
+.g-pn-a b { font-size: 16px; font-weight: 700; word-break: keep-all; }
+.g-pn-a:hover b { color: #4a7bfa; }
+
+@media (max-width: 860px) {
+  .guide { grid-template-columns: minmax(0, 1fr); gap: 26px; padding-top: 34px; }
+  /* 좁은 화면에서는 목차가 위로 올라와 가로로 밀립니다. 쪽을 넘길 때마다 맨 위에 있습니다. */
+  .g-nav { position: static; }
+  .g-nav .kick { display: none; }
+  .g-nav-list {
+    margin-top: 0; flex-direction: row; overflow-x: auto;
+    border-left: 0; border-bottom: 1px solid #1e232b;
+  }
+  .g-nav-list a {
+    padding: 12px 14px; margin: 0 0 -1px; white-space: nowrap;
+    border-left: 0; border-bottom: 2px solid transparent;
+  }
+  .g-nav-list a.on { border-bottom-color: #4a7bfa; }
+  .g-nav-list a i { display: none; }
+  .g-m { padding: 16px; gap: 14px; }
+  .g-table:not(.wide) td:first-child { white-space: normal; }
+}
+
 /* ------------------------------------------------------------------ 푸터 */
 
 .ftr {
