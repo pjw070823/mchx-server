@@ -19,7 +19,7 @@
  */
 
 /** Newest published build. Clients below this are offered the update. */
-export const LATEST = "0.1.17";
+export const LATEST = "0.1.18";
 
 /**
  * Oldest build allowed to connect. Clients below this are refused.
@@ -29,7 +29,7 @@ export const LATEST = "0.1.17";
  * tolerable costs more than it saves. Lower it to leave a grace window for a release
  * that changed nothing a client depends on.
  */
-export const MINIMUM = "0.1.1";  // 0.1.17 published; the floor moves in its own deploy
+export const MINIMUM = "0.1.1";  // 0.1.18 published; the floor moves in its own deploy
 
 /**
  * The oldest build that runs on the Minecraft version the game is played on.
@@ -88,11 +88,11 @@ export interface Download {
  * come from the same place we already trust for everything else.
  */
 export const DOWNLOAD: Download | null = {
-  url: "https://mc-hex.com/downloads/mchx-0.1.17.jar",
+  url: "https://mc-hex.com/downloads/mchx-0.1.18.jar",
   sha512:
-    "8e529f240a20469f9068f5756ba91ee95504211ae232ee597374c6d5b22dbf1e" +
-    "ab30381fe533ea76302b41bc60d4fe2a839eae4914c222eb024209e385c61929",
-  sizeBytes: 1660860,
+    "b55050773565849541ce74446e2e36a62fb6ee7cf3dad51305ef415295481b63" +
+    "faa599374397256d18b866bc4baf0f3b41fdd491aeaff142b7de8d5740c49084",
+  sizeBytes: 1663311,
 };
 
 /**
