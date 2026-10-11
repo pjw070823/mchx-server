@@ -12,6 +12,7 @@ import type {
 } from "./protocol.js";
 import { DEFAULT_SETTINGS, PROTOCOL_VERSION, TEAM_PROTOCOL } from "./protocol.js";
 import { relayHub, type RelayLink } from "./relay.js";
+import { seedPool, type PoolSeed } from "./seed-pool.js";
 import { DEFAULT_ELO, getOrCreatePlayer } from "./db.js";
 import { MatchEngine } from "./match-engine.js";
 import { RoomBroadcaster } from "./broadcaster.js";
@@ -88,6 +89,9 @@ export class Room {
 
   /** Hands out [PlayerSession.seatedAt]. */
   private seatCounter = 0;
+
+  /** The pool seed the match under way is being played on, or null if it was rolled. */
+  private poolSeed: PoolSeed | null = null;
 
   /**
    * Where each player plays the match under way.
@@ -527,6 +531,10 @@ export class Room {
   startMatchByHost(playerId: string): { ok: boolean; reason?: string } {
     if (this.origin !== "custom" || this.hostId !== playerId) return { ok: false, reason: "not_host" };
     if (!this.isReadyToStart() && !this.canStartShort()) return { ok: false, reason: "not_ready" };
+    // Refused, not quietly played on a random seed. The room asked for a filtered seed
+    // and everybody in it can see that it did; a match that silently was not one would
+    // be found out a quarter of an hour in, by players looking for a village.
+    if (this.settings.seedFilter && seedPool.size() === 0) return { ok: false, reason: "seed_pool_empty" };
     this.beginMatch();
     return { ok: true };
   }
@@ -560,7 +568,11 @@ export class Room {
   }
 
   private beginMatch(): void {
-    this.engine.begin();
+    // Only where the setting can be set. A ranked room's settings are the fixed preset,
+    // which has it off, so this is belt and braces — but the pool must never be what a
+    // rated match is played on, and that is worth saying twice.
+    this.poolSeed = this.origin === "custom" && this.settings.seedFilter ? seedPool.pick() : null;
+    this.engine.begin(this.poolSeed?.seed);
     this.status = "playing";
     // One side with nobody on it, not one player in the room: two teammates with the
     // other team empty have no opponent either.
@@ -920,6 +932,7 @@ export class Room {
       startsAt: this.engine.startedAt,
       solo: this.solo,
       world: viewer ? this.worldFor(viewer) : null,
+      seedFeatures: this.poolSeed ? [...this.poolSeed.features] : null,
     });
   }
 

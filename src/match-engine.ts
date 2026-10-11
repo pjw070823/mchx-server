@@ -46,10 +46,16 @@ export class MatchEngine {
    * Start a fresh match. The seed is re-rolled every time: reusing it would make both
    * clients regenerate the *same* world directory on disk and collide with the previous
    * match's terrain.
+   *
+   * [worldSeed] is a seed chosen for the match rather than rolled — one from the pool.
+   * The board is then dealt from a roll of its own. Dealing it from the seed, as a random
+   * match does, would give a pool seed the same twenty-five missions on the same tiles
+   * every time it came up, and a pool seed comes up again.
    */
-  begin(): void {
-    this.seed = randomSeed64();
-    this.board = buildBoard(mulberry32(Number(this.seed & 0xffffffffn)));
+  begin(worldSeed?: bigint): void {
+    this.seed = worldSeed ?? randomSeed64();
+    const boardSeed = worldSeed === undefined ? this.seed : randomSeed64();
+    this.board = buildBoard(mulberry32(Number(boardSeed & 0xffffffffn)));
     this.claimedMap.clear();
     this.claimedLog.length = 0;
     this.startedAt = Date.now();

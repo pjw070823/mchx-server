@@ -97,6 +97,16 @@ export const RoomSettings = z.object({
    * not the host's to pick — and there is no host in a ranked room to pick them.
    */
   lateSupplies: z.boolean(),
+  /**
+   * Draw the world's seed from the pool of seeds known to have something near the spawn
+   * — a village, a ruined portal that can be finished, a lava pool, a wide cave mouth —
+   * instead of rolling one at random. See seed-pool.ts.
+   *
+   * Custom rooms only. The ladder's worlds are random and stay random: a pool is a few
+   * hundred seeds, and rated play on a list that short would be decided by who had seen
+   * more of it.
+   */
+  seedFilter: z.boolean(),
 });
 export type RoomSettings = z.infer<typeof RoomSettings>;
 
@@ -107,6 +117,7 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   nightVision: true,
   waterBreathing: true,
   lateSupplies: true,
+  seedFilter: false,
 };
 
 /** Mirrors `RoomOrigin` in room-config.ts. Declared here so it can cross the wire. */
@@ -370,6 +381,13 @@ export const ServerMessage = z.discriminatedUnion("type", [
     solo: z.boolean().optional(),
     /** Null for spectators, who have no world. See [MatchWorld]. */
     world: MatchWorld.nullable().optional(),
+    /**
+     * What a filtered seed has near its spawn, by name; null when the seed is random.
+     *
+     * What, not where. The players are told there is a village to find and are left to
+     * find it — the coordinates stay in the pool file and never reach a client.
+     */
+    seedFeatures: z.array(z.string()).nullable().optional(),
   }),
   /**
    * To one team only: which of its players are currently asking to give up.

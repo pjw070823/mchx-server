@@ -36,6 +36,7 @@ export const SETTINGS_POLICY: Policy = {
   nightVision: { requiredTier: "free" },
   waterBreathing: { requiredTier: "free" },
   lateSupplies: { requiredTier: "free" },
+  seedFilter: { requiredTier: "free" },
 };
 
 /**
@@ -60,6 +61,8 @@ export const RANKED_SETTINGS: RoomSettings = {
   // Fixed on for the ladder, like every other ranked setting: two players at the same
   // rating must have been playing the same game.
   lateSupplies: true,
+  // Random seeds on the ladder, always. See `RoomSettings.seedFilter`.
+  seedFilter: false,
 };
 
 export interface PatchResult {

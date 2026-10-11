@@ -71,15 +71,15 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
 
     if (uuid) {
       if (!UUID_RE.test(uuid)) return res.status(400).json({ error: "bad_uuid" });
-      return res.json({ matches: getRecentMatches(uuid, limit), total: undefined });
+      return res.json({ matches: getRecentMatches(uuid, limit).map(withoutPoolSeed), total: undefined });
     }
     if (player) {
       return res.json({
-        matches: getMatchesByPlayerName(player, limit, offset),
+        matches: getMatchesByPlayerName(player, limit, offset).map(withoutPoolSeed),
         total: getMatchCount(player),
       });
     }
-    return res.json({ matches: getAllMatches(limit, offset), total: getMatchCount() });
+    return res.json({ matches: getAllMatches(limit, offset).map(withoutPoolSeed), total: getMatchCount() });
   });
 
   target.get("/api/matches/:id", (req, res) => {
@@ -87,7 +87,7 @@ export function mountApiRoutes(target: express.Express, rooms: RoomRegistry): vo
     if (id === null) return res.status(400).json({ error: "bad_id" });
     const row = getMatchById(id);
     if (!row) return res.status(404).json({ error: "not_found" });
-    res.json(row);
+    res.json(withoutPoolSeed(row));
   });
 
   /**
@@ -255,6 +255,22 @@ function parseJsonArray(raw: string | null): any[] {
   }
 }
 
+/**
+ * A match row as the public may see it: without its seed, if the seed came from the pool.
+ *
+ * A rolled seed is used once and thrown away, so publishing it afterwards gives nobody
+ * anything. A pool seed is used again. Left in these rows, the pool could be collected
+ * one finished match at a time by anyone who cared to poll this endpoint — and a player
+ * who had walked every pool seed in advance would know where the village was before the
+ * countdown ended.
+ *
+ * Told apart by the room's settings, which are stored with the match. The players of the
+ * match still know its seed, as they always have; this closes the door for everyone else.
+ */
+function withoutPoolSeed<T extends { seed: string | null; settings_json: string | null }>(row: T): T {
+  return parseJsonObject(row.settings_json)?.seedFilter === true ? { ...row, seed: null } : row;
+}
+
 function parseJsonObject(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
   try {
@@ -265,4 +281,4 @@ function parseJsonObject(raw: string | null): Record<string, unknown> | null {
   }
 }
 
-export { UUID_RE, matchId, parseJsonArray, parseJsonObject };
+export { UUID_RE, matchId, parseJsonArray, parseJsonObject, withoutPoolSeed };
