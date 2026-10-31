@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,16 @@ import type { Room, RoomConfig } from "../src/room.js";
 if (!process.env.MCHX_DB_PATH) {
   process.env.MCHX_DB_PATH = join(mkdtempSync(join(tmpdir(), "mchx-test-")), "test.sqlite");
 }
+
+// Never read a developer's real pool, even when MCHX_SEED_POOL is set in the shell.
+process.env.MCHX_SEED_POOL = join(mkdtempSync(join(tmpdir(), "mchx-test-pool-")), "seed-pool.jsonl");
+export function writeTestSeedPool(): void {
+  writeFileSync(process.env.MCHX_SEED_POOL!, JSON.stringify({
+    seed: "42", mcVersion: "26.3", status: "verified",
+    tags: { village: { found: true } }, start: { x: 12, z: 34 },
+  }) + "\n");
+}
+writeTestSeedPool();
 
 export interface Frame {
   type: string;
@@ -142,7 +152,7 @@ export function fakeConn(
     lastRefillAt: Date.now(),
     spectateFailCount: 0,
     spectateBlockedUntil: 0,
-    protocolVersion: opts.protocolVersion === undefined ? 2 : opts.protocolVersion,
+    protocolVersion: opts.protocolVersion === undefined ? 4 : opts.protocolVersion,
     clientVersion: opts.clientVersion ?? null,
     challenge: null,
     verified: uuid ? { uuid, name: opts.name ?? "Player" } : null,

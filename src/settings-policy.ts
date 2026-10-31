@@ -42,7 +42,8 @@ export const SETTINGS_POLICY: Policy = {
 /**
  * The fixed ladder preset.
  *
- * Identical to `DEFAULT_SETTINGS` today, and deliberately *not* the same constant.
+ * Separate from `DEFAULT_SETTINGS`: ranked always uses the checked seed pool, while
+ * custom rooms leave that choice to their host.
  * `DEFAULT_SETTINGS` is where a custom room starts and is expected to drift as tier
  * options land; the ladder must not drift with it. Free perk choice would also make
  * leaderboard positions incomparable — two players at the same rating would have been
@@ -61,8 +62,7 @@ export const RANKED_SETTINGS: RoomSettings = {
   // Fixed on for the ladder, like every other ranked setting: two players at the same
   // rating must have been playing the same game.
   lateSupplies: true,
-  // Random seeds on the ladder, always. See `RoomSettings.seedFilter`.
-  seedFilter: false,
+  seedFilter: true,
 };
 
 export interface PatchResult {

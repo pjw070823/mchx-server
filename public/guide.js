@@ -227,7 +227,8 @@ const KO = {
       "마인크래프트 정품 계정 인증이 필요합니다. 인증은 게임이 이미 로그인해 있는 계정으로 자동으로 이루어지고, 비밀번호를 묻지 않습니다.",
       "대기열에 들어가면 레이팅이 비슷한 상대를 찾습니다. 처음에는 ±100 안에서 찾고, 기다릴수록 초당 20씩 범위가 넓어지며, 2분이 지나면 누구와도 맺어집니다.",
       "상대를 찾으면 수락 단계 없이 바로 시작합니다.",
-      "설정은 고정입니다: 인벤토리 세이브, 포화 효과, 야간 투시, 수중 호흡, 30분 겉날개 지급이 모두 켜져 있고 시드는 항상 무작위입니다.",
+      "인벤토리 세이브, 포화 효과, 야간 투시, 수중 호흡, 30분 겉날개 지급, <b>시드 필터링</b>이 모두 켜져 있으며 변경할 수 없습니다.",
+      "랭크전은 0.1.19 이상이 필요합니다. 서버에 필터 시드가 준비되지 않으면 매칭을 시작할 수 없습니다.",
       "같은 인터넷 주소의 두 사람은 맺어지지 않습니다.",
     ])}
     ${h("커스텀 방")}
@@ -268,20 +269,21 @@ const KO = {
       ["포화 효과", "켜짐", "배고픔이 줄지 않습니다"],
       ["야간 투시", "켜짐", "어두운 곳이 밝게 보입니다"],
       ["수중 호흡", "켜짐", "물속에서 숨이 줄지 않습니다"],
-      ["30분 겉날개 지급", "켜짐", "시작 30분 뒤 모든 플레이어가 겉날개 1개와 폭죽 16개를 받습니다"],
+      ["30분 겉날개 지급", "켜짐", "시작 30분 뒤 모든 플레이어가 내구도가 닳지 않는 겉날개 1개와 폭죽 16개를 받습니다"],
       ["시드 필터링", "꺼짐", "스폰 근처에 쓸 만한 것이 있는 시드에서 시작합니다 (아래)"],
     ])}
-    ${p("효과 셋은 판 내내 유지되고 죽은 뒤에도 다시 걸립니다. 랭크전은 위 표의 기본값으로 고정이고 시드 필터링은 항상 꺼져 있습니다.")}
+    ${p("효과 셋은 판 내내 유지되고 죽은 뒤에도 다시 걸립니다. 위 표는 커스텀 방의 기본값입니다. 랭크전은 시드 필터링을 포함한 모든 효과와 보급 설정이 켜진 상태로 고정됩니다.")}
     ${h("시드 필터링")}
-    ${p("꺼져 있으면 시드는 매 판 완전히 무작위입니다. 켜면 서버가 <b>미리 확인해 둔 시드 목록</b>에서 하나를 무작위로 뽑습니다. 그 시드들은 스폰 지점에서 128블록 안에 다음 중 하나 이상이 있습니다.")}
+    ${p("꺼져 있으면 시드는 매 판 완전히 무작위입니다. 켜면 서버가 <b>미리 확인해 둔 시드 목록</b>에서 하나를 무작위로 뽑습니다. 그 시드들에는 다음 중 하나 이상이 있고, <b>그중 하나는 시작 지점에서 64블록 안</b>에 있습니다.")}
     ${ul([
       "<b>마을</b>",
       "<b>루인드 포탈</b> — 지상에 있고, 상자 속 흑요석과 근처의 용암으로 틀의 빈자리를 마저 채울 수 있는 것",
       "<b>용암 풀</b> — 지표에 드러난 용암이 10블록 이상 이어진 것",
       "<b>대동굴</b> — 지상으로 넓게 트인 동굴 입구",
     ])}
-    ${p("카운트다운 화면에 그 시드에 <b>무엇이 있는지</b>가 한 줄로 나옵니다(예: \"마을 · 용암 풀 시드\"). 어디에 있는지는 알려주지 않습니다 — 찾는 것은 플레이의 일부입니다. 미션 판은 시드와 상관없이 매번 새로 뽑으므로, 같은 시드가 다시 나와도 미션은 다릅니다.")}
-    ${note("서버에 준비된 시드가 없으면 방장이 시작을 눌렀을 때 방 채팅에 안내가 뜨고 시작되지 않습니다. 설정을 끄면 시작할 수 있습니다.")}
+    ${p("여러 가지가 있는 시드는 <b>루인드 포탈, 용암 풀, 마을, 대동굴 순서로 먼저 있는 것</b> 가까이에서 시작합니다. 나머지는 그보다 멀리 있을 수 있습니다. 이를 위해 시작 지점이 게임이 원래 고르는 스폰과 다를 수 있고, 두 진영은 정확히 같은 자리에서 시작합니다.")}
+    ${p("카운트다운 화면에 그 시드에 <b>무엇이 있는지</b>가 한 줄로 나옵니다(예: \"마을 · 용암 풀 시드\"). 어느 방향에 있는지는 알려주지 않습니다 — 찾는 것은 플레이의 일부입니다. 미션 판은 시드와 상관없이 매번 새로 뽑으므로, 같은 시드가 다시 나와도 미션은 다릅니다.")}
+    ${note("시드 필터링을 켠 방에는 오래된 모드로 들어올 수 없습니다(업데이트 안내가 뜹니다). 서버에 준비된 시드가 없으면 방장이 시작을 눌렀을 때 방 채팅에 안내가 뜨고 시작되지 않습니다. 설정을 끄면 시작할 수 있습니다.")}
     ${h("항상 적용되는 것")}
     ${ul([
       "난이도는 <b>보통</b>으로 고정이고 바꿀 수 없습니다.",
@@ -316,7 +318,7 @@ const KO = {
       "2대2 에서는 팀원 둘이 모두 눌러야 합니다 — <a href=\"#/guide/modes\">게임 모드</a>.",
     ])}
     ${h("30분 겉날개")}
-    ${p("판이 30분을 넘기면 모든 플레이어에게 겉날개 1개와 폭죽 16개가 지급됩니다. 그쯤 되면 남은 미션이 서로 멀리 떨어져 있어 이동이 승부를 정하기 쉽기 때문입니다. 방 설정에서 끌 수 있고 랭크전에서는 항상 켜져 있습니다.")}
+    ${p("판이 30분을 넘기면 모든 플레이어에게 <b>내구도가 닳지 않는 겉날개 1개</b>와 폭죽 16개가 지급됩니다. 후반에 남은 미션까지 이동하는 시간을 줄이기 위한 보급입니다. 커스텀 방 설정에서 끌 수 있고 랭크전에서는 항상 켜져 있습니다.")}
     ${h("명령어")}
     ${table(["명령어", "하는 일"], [
       ["<code>/kill-myself</code>", "스스로 죽습니다. 갇혔을 때 스폰으로 돌아가는 방법입니다"],
@@ -466,7 +468,8 @@ const EN = {
       "Needs a verified Minecraft account. Verification happens automatically with the account the game is already signed in to; you are never asked for a password.",
       "The queue looks for someone near your rating: within ±100 at first, widening by 20 a second, and after two minutes it pairs you with anyone.",
       "A match starts as soon as a pair is found. There is no accept step.",
-      "Settings are fixed: keep inventory, saturation, night vision, water breathing and the 30-minute elytra are all on, and the seed is always random.",
+      "Keep inventory, saturation, night vision, water breathing, the 30-minute elytra and <b>seed filtering</b> are all on and cannot be changed.",
+      "Ranked requires version 0.1.19 or newer. Matchmaking cannot start if the server has no filtered seeds available.",
       "Two players behind the same internet address are never paired.",
     ])}
     ${h("Custom room")}
@@ -507,20 +510,21 @@ const EN = {
       ["포화 효과 (saturation)", "on", "Hunger never drops"],
       ["야간 투시 (night vision)", "on", "Dark places are lit"],
       ["수중 호흡 (water breathing)", "on", "You do not run out of air underwater"],
-      ["30분 겉날개 지급 (30-minute elytra)", "on", "Thirty minutes in, every player is given an elytra and 16 firework rockets"],
+      ["30분 겉날개 지급 (30-minute elytra)", "on", "Thirty minutes in, every player is given an unbreakable elytra and 16 firework rockets"],
       ["시드 필터링 (seed filter)", "off", "Start on a seed with something useful near the spawn (below)"],
     ])}
-    ${p("The three effects last the whole match and are reapplied after death. Ranked uses the defaults above, fixed, and never uses the seed filter.")}
+    ${p("The three effects last the whole match and are reapplied after death. The table shows custom-room defaults. Ranked always enables seed filtering, all effects and the 30-minute supplies.")}
     ${h("Seed filter")}
-    ${p("Off, the seed is fully random every match. On, the server draws one at random from <b>a list of seeds it has checked in advance</b>. Each of those has at least one of these within 128 blocks of the spawn point:")}
+    ${p("Off, the seed is fully random every match. On, the server draws one at random from <b>a list of seeds it has checked in advance</b>. Each of those has at least one of the following, and <b>one of them is within 64 blocks of where you start</b>:")}
     ${ul([
       "<b>a village</b>",
       "<b>a ruined portal</b> — on the surface, and one whose missing frame blocks can be filled from the obsidian in its chest and the lava nearby",
       "<b>a lava pool</b> — ten or more connected lava blocks open to the sky",
       "<b>a large cave</b> — a wide cave mouth open to the surface",
     ])}
-    ${p("The countdown screen names <b>what the seed has</b> in one line. It does not say where — finding it is part of the play. The mission board is dealt separately from the seed, so the same seed coming up again brings different missions.")}
-    ${note("If the server has no checked seeds available, pressing start shows a notice in the room chat and the match does not begin. Turn the setting off to start.")}
+    ${p("When a seed has several, you start near <b>the first it has in this order: ruined portal, lava pool, village, large cave</b>. The others may be further off. To make that so, the starting point may differ from the spawn the game would have picked, and both sides start on exactly the same spot.")}
+    ${p("The countdown screen names <b>what the seed has</b> in one line. It does not say in which direction — finding it is part of the play. The mission board is dealt separately from the seed, so the same seed coming up again brings different missions.")}
+    ${note("A room with the seed filter on cannot be joined with an out-of-date mod (you are told to update). If the server has no checked seeds available, pressing start shows a notice in the room chat and the match does not begin. Turn the setting off to start.")}
     ${h("Always on")}
     ${ul([
       "Difficulty is fixed at <b>Normal</b> and cannot be changed.",
@@ -555,7 +559,7 @@ const EN = {
       "In 2v2 both teammates have to press it — see <a href=\"#/guide/modes\">Modes</a>.",
     ])}
     ${h("The 30-minute elytra")}
-    ${p("Once a match passes thirty minutes every player is handed an elytra and 16 firework rockets. By then the missions left tend to be far apart and travel decides the result. It can be turned off in the room settings and is always on in ranked.")}
+    ${p("Once a match passes thirty minutes, every player receives <b>an unbreakable elytra</b> and 16 firework rockets to reduce travel time between the remaining missions. It can be turned off in custom-room settings and is always on in ranked.")}
     ${h("Commands")}
     ${table(["Command", "What it does"], [
       ["<code>/kill-myself</code>", "Kills you. The way back to spawn if you are stuck"],

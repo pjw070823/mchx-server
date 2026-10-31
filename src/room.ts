@@ -10,7 +10,7 @@ import type {
   Side,
   TileId,
 } from "./protocol.js";
-import { DEFAULT_SETTINGS, PROTOCOL_VERSION, TEAM_PROTOCOL } from "./protocol.js";
+import { DEFAULT_SETTINGS, PROTOCOL_VERSION, SPAWN_PROTOCOL, TEAM_PROTOCOL } from "./protocol.js";
 import { relayHub, type RelayLink } from "./relay.js";
 import { seedPool, type PoolSeed } from "./seed-pool.js";
 import { DEFAULT_ELO, getOrCreatePlayer } from "./db.js";
@@ -165,7 +165,21 @@ export class Room {
    * the whole match — unable to help its team and unaware of it.
    */
   canSeat(protocol: number): boolean {
-    return this.settings.gameMode !== "2v2" || protocol >= TEAM_PROTOCOL;
+    return this.whyNotSeat(protocol) === null;
+  }
+
+  /**
+   * What about this room a client speaking [protocol] is too old for, if anything.
+   *
+   * The reason and not just the answer, because the client is told: "update" on its own
+   * does not say why this room and not the last one.
+   */
+  whyNotSeat(protocol: number): "2v2" | "seedFilter" | null {
+    if (this.settings.gameMode === "2v2" && protocol < TEAM_PROTOCOL) return "2v2";
+    // On a filtered seed the server says where the match starts. A client that does not
+    // read that starts somewhere else, in a match it believes is even.
+    if (this.settings.seedFilter && protocol < SPAWN_PROTOCOL) return "seedFilter";
+    return null;
   }
 
   addPlayer(
@@ -477,6 +491,11 @@ export class Room {
     if (patch.gameMode && patch.gameMode !== this.settings.gameMode && !this.fits(patch.gameMode)) {
       delete patch.gameMode;
     }
+    // The same for the seed filter: it cannot be turned on over a client that would not
+    // start where the server puts the match. See `SPAWN_PROTOCOL`.
+    if (patch.seedFilter && [...this.players.values()].some((p) => p.protocol < SPAWN_PROTOCOL)) {
+      delete patch.seedFilter;
+    }
 
     const requester = this.players.get(playerId);
     const { settings, deniedByTier } = applySettingsPatch(
@@ -531,12 +550,7 @@ export class Room {
   startMatchByHost(playerId: string): { ok: boolean; reason?: string } {
     if (this.origin !== "custom" || this.hostId !== playerId) return { ok: false, reason: "not_host" };
     if (!this.isReadyToStart() && !this.canStartShort()) return { ok: false, reason: "not_ready" };
-    // Refused, not quietly played on a random seed. The room asked for a filtered seed
-    // and everybody in it can see that it did; a match that silently was not one would
-    // be found out a quarter of an hour in, by players looking for a village.
-    if (this.settings.seedFilter && seedPool.size() === 0) return { ok: false, reason: "seed_pool_empty" };
-    this.beginMatch();
-    return { ok: true };
+    return this.beginMatch();
   }
 
   /**
@@ -563,15 +577,18 @@ export class Room {
    */
   start(): { ok: boolean; reason?: string } {
     if (!this.isReadyToStart()) return { ok: false, reason: "not_ready" };
-    this.beginMatch();
-    return { ok: true };
+    return this.beginMatch();
   }
 
-  private beginMatch(): void {
-    // Only where the setting can be set. A ranked room's settings are the fixed preset,
-    // which has it off, so this is belt and braces — but the pool must never be what a
-    // rated match is played on, and that is worth saying twice.
-    this.poolSeed = this.origin === "custom" && this.settings.seedFilter ? seedPool.pick() : null;
+  private beginMatch(): { ok: boolean; reason?: string } {
+    // Pick once: checking the size first could race a pool replacement and silently
+    // fall back to a random world after promising a filtered one.
+    const selected = this.settings.seedFilter ? seedPool.pick() : null;
+    if (this.settings.seedFilter && !selected) return { ok: false, reason: "seed_pool_empty" };
+    this.poolSeed = selected;
+    // Queue clients need the room before match_start, but a failed seed pick must not
+    // leave a room code in their state after the server has discarded the room.
+    if (this.origin === "ranked") this.notifyJoin();
     this.engine.begin(this.poolSeed?.seed);
     this.status = "playing";
     // One side with nobody on it, not one player in the room: two teammates with the
@@ -590,6 +607,7 @@ export class Room {
     for (const p of this.players.values()) this.sendMatchSnapshot(p.ws, p);
     for (const sp of this.spectators) this.sendMatchSnapshot(sp, null);
     this.armReadyTimeout();
+    return { ok: true };
   }
 
   /**
@@ -933,6 +951,9 @@ export class Room {
       solo: this.solo,
       world: viewer ? this.worldFor(viewer) : null,
       seedFeatures: this.poolSeed ? [...this.poolSeed.features] : null,
+      // Players only. To a spectator it is a hint about a world they are not in, and a
+      // spectator is one message away from a player.
+      spawn: viewer && this.poolSeed?.start ? { ...this.poolSeed.start } : null,
     });
   }
 

@@ -4,6 +4,8 @@ import type { Room, RoomRegistry } from "./room.js";
 import type { RoomConfig } from "./room-config.js";
 import { DEFAULT_ELO, getOrCreatePlayer } from "./db.js";
 import { send, sendError } from "./wire.js";
+import { SPAWN_PROTOCOL } from "./protocol.js";
+import { seedPool } from "./seed-pool.js";
 
 /**
  * The ranked queue.
@@ -59,7 +61,9 @@ export type EnqueueFailure =
   | "already_queued"
   | "already_in_room"
   | "uuid_in_use"
-  | "queue_cooldown";
+  | "queue_cooldown"
+  | "protocol_mismatch"
+  | "queue_failed";
 
 export type EnqueueResult = { ok: true } | { ok: false; code: EnqueueFailure };
 
@@ -70,6 +74,8 @@ export const QUEUE_ERROR_TEXT: Record<EnqueueFailure, string> = {
   already_in_room: "leave your room first",
   uuid_in_use: "this account is already queued or in a room",
   queue_cooldown: "slow down",
+  protocol_mismatch: "랭크전은 필터 시드를 사용합니다. 모드를 업데이트한 뒤 다시 참여해 주세요.",
+  queue_failed: "필터 시드가 준비되지 않아 랭크전을 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.",
 };
 
 interface QueueEntry {
@@ -186,6 +192,9 @@ export class Matchmaker {
       // Same account on a second socket, queued or already playing.
       return { ok: false, code: "uuid_in_use" };
     }
+
+    if ((state.protocolVersion ?? 0) < SPAWN_PROTOCOL) return { ok: false, code: "protocol_mismatch" };
+    if (seedPool.size() === 0) return { ok: false, code: "queue_failed" };
 
     // The one client-controlled database read in the whole queue. Guarded by the
     // cooldown, which is why the cooldown exists at all.
@@ -337,8 +346,8 @@ export class Matchmaker {
     this.dequeue(b.conn, "matched");
 
     const room = this.rooms.create(this.roomConfig, "ranked");
-    const seatA = room.addPlayer(a.conn.playerId, a.name, a.uuid, a.ws, a.remoteAddr);
-    const seatB = room.addPlayer(b.conn.playerId, b.name, b.uuid, b.ws, b.remoteAddr);
+    const seatA = room.addPlayer(a.conn.playerId, a.name, a.uuid, a.ws, a.remoteAddr, a.conn.protocolVersion ?? 0);
+    const seatB = room.addPlayer(b.conn.playerId, b.name, b.uuid, b.ws, b.remoteAddr, b.conn.protocolVersion ?? 0);
 
     if (!seatA || !seatB) {
       // Cannot happen on a room built one line ago. If it ever does, something is badly
@@ -354,10 +363,16 @@ export class Matchmaker {
     a.conn.isSpectator = false;
     b.conn.isSpectator = false;
 
-    room.notifyJoin();
+    // start() sends room_state before match_start only once a seed has been selected.
     const started = room.start();
     if (!started.ok) {
       console.error(`[mm] ranked room ${room.code} refused to start: ${started.reason}`);
+      // The pool can disappear while players wait. Release both connections without
+      // settling a match that never started or leaving them in an unusable room.
+      a.conn.room = null;
+      b.conn.room = null;
+      this.rooms.delete(room.code);
+      for (const e of [a, b]) sendError(e.ws, "queue_failed", QUEUE_ERROR_TEXT.queue_failed);
       return null;
     }
 

@@ -43,6 +43,17 @@ function errorFrom(sock: FakeWs): string | undefined {
 }
 
 describe("handlers — joining the queue", () => {
+  it("tells a verified old client to update before joining ranked", () => {
+    const d = deps();
+    const { state, sock } = verified();
+    state.protocolVersion = 3;
+    handleClientMessage(sock.ws, state, { type: "join_queue" }, d);
+    assert.equal(errorFrom(sock), "protocol_mismatch");
+    assert.match(String(sock.last("error")?.message), /업데이트/);
+    assert.equal(d.mm.size(), 0);
+    assert.equal(state.room, null);
+  });
+
   it("requires the hello handshake first", () => {
     const d = deps();
     const { state, sock } = fakeConn({ protocolVersion: null });

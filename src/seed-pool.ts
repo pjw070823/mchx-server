@@ -28,6 +28,16 @@ export interface PoolSeed {
   readonly seed: bigint;
   /** Which of the four are near the spawn. Never empty: that is what being in the pool means. */
   readonly features: readonly SeedFeature[];
+  /**
+   * The column the match starts on, or null to start at the world's own spawn.
+   *
+   * A seed passes if its feature is within 128 blocks of the natural spawn, and most of
+   * them have it past 64 — out of sight, in an unknown direction. The pool builder moves
+   * the start of those to within 64 blocks of the feature (`start` in the record). A
+   * record from before that existed has none, and plays from the natural spawn as it
+   * always did.
+   */
+  readonly start: { readonly x: number; readonly z: number } | null;
 }
 
 /**
@@ -109,6 +119,7 @@ export function parsePool(text: string): PoolSeed[] {
     const record = JSON.parse(trimmed) as {
       seedId?: unknown; seed?: unknown; mcVersion?: unknown; status?: unknown;
       tags?: Record<string, { found?: unknown } | undefined>;
+      start?: { x?: unknown; z?: unknown } | null;
     };
     if (record.status !== "verified" || record.mcVersion !== POOL_MINECRAFT) continue;
     // The seed is a string in the file and must stay one until it is a BigInt: read as a
@@ -116,10 +127,14 @@ export function parsePool(text: string): PoolSeed[] {
     if (typeof record.seed !== "string" || !/^-?\d+$/.test(record.seed)) continue;
     const features = SEED_FEATURES.filter((name) => record.tags?.[name]?.found === true);
     if (features.length === 0) continue;
+    const { x, z } = record.start ?? {};
     seeds.push({
       seedId: typeof record.seedId === "string" ? record.seedId : record.seed,
       seed: BigInt.asIntN(64, BigInt(record.seed)),
       features,
+      // Both or neither. Half a coordinate is a damaged record, and guessing the other
+      // half would start a match somewhere nobody chose.
+      start: Number.isSafeInteger(x) && Number.isSafeInteger(z) ? { x: x as number, z: z as number } : null,
     });
   }
   return seeds;

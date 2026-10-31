@@ -18,14 +18,27 @@ import { z } from "zod";
  * signal — the mod greys out 랭크전 against an older server and says why, rather than
  * opening a queue screen that hangs on `bad_message`.
  *
+ * 4 — `match_start.spawn`: on a filtered seed the server says where the match starts.
+ *
  * A v2 client is served too, but not seated in a 2v2 room: told it is a guest in a
  * teammate's world, it would ignore the part it does not know and generate a world of its
- * own. See [TEAM_PROTOCOL].
+ * own. See [TEAM_PROTOCOL]. A v3 client is kept out of a seed-filter room for the same
+ * kind of reason — see [SPAWN_PROTOCOL].
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** The first protocol whose clients can share a team world. */
 export const TEAM_PROTOCOL = 3;
+
+/**
+ * The first protocol whose clients start a match where `match_start.spawn` says.
+ *
+ * An older client ignores the field and starts at the world's own spawn, which on a
+ * filtered seed can be a hundred blocks from where its opponent starts — and from the
+ * thing the seed was chosen for. It would play the match without knowing it had been
+ * handed the worse start, so it is not seated in a room with the filter on.
+ */
+export const SPAWN_PROTOCOL = 4;
 
 export const Difficulty = z.enum(["easy", "medium", "hard"]);
 export type Difficulty = z.infer<typeof Difficulty>;
@@ -102,9 +115,7 @@ export const RoomSettings = z.object({
    * — a village, a ruined portal that can be finished, a lava pool, a wide cave mouth —
    * instead of rolling one at random. See seed-pool.ts.
    *
-   * Custom rooms only. The ladder's worlds are random and stay random: a pool is a few
-   * hundred seeds, and rated play on a list that short would be decided by who had seen
-   * more of it.
+   * Fixed on for ranked play. Custom rooms default to off and let their host choose.
    */
   seedFilter: z.boolean(),
 });
@@ -388,6 +399,16 @@ export const ServerMessage = z.discriminatedUnion("type", [
      * find it — the coordinates stay in the pool file and never reach a client.
      */
     seedFeatures: z.array(z.string()).nullable().optional(),
+    /**
+     * Where the match starts, on a filtered seed: the column the world's spawn is put on.
+     * Null on a rolled seed, where the game's own spawn is used, and null for spectators.
+     *
+     * This is the one coordinate that leaves the pool, and it is not the coordinate of
+     * anything: it says the seed's feature is within a short walk, which the players are
+     * told anyway, and not in which direction. No height — the same seed does not make
+     * the same world block for block, so the client reads the ground where it stands.
+     */
+    spawn: z.object({ x: z.number().int(), z: z.number().int() }).nullable().optional(),
   }),
   /**
    * To one team only: which of its players are currently asking to give up.

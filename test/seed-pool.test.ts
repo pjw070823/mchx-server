@@ -2,9 +2,9 @@ import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-// Sets MCHX_DB_PATH as a side effect, which is also where the pool file is looked for.
+// Sets disposable database and seed-pool paths before the dynamic imports below.
 // Must come before the dynamic imports below.
 import { boardOf, FAST, FakeWs, muteConsole, seat } from "./helpers.js";
 
@@ -44,6 +44,17 @@ describe("parsePool", () => {
   it("lists what a seed has, in a fixed order", () => {
     const [seed] = parsePool(record("1", ["caveEntrance", "village"]));
     assert.deepEqual(seed!.features, ["village", "caveEntrance"]);
+  });
+
+  it("reads where the match starts, and leaves it empty when the record does not say", () => {
+    const [moved, natural, damaged] = parsePool([
+      record("1", ["lavaPool"], { start: { x: -12, z: 340, toward: "lavaPool", moved: true } }),
+      record("2", ["village"]),                                  // a record from before `start` existed
+      record("3", ["village"], { start: { x: 5 } }),             // half a coordinate
+    ].join("\n"));
+    assert.deepEqual(moved!.start, { x: -12, z: 340 });
+    assert.equal(natural!.start, null);
+    assert.equal(damaged!.start, null, "half a coordinate is not somewhere to start a match");
   });
 
   it("skips what should not be played on", () => {
@@ -103,11 +114,11 @@ describe("SeedPool", () => {
 });
 
 /**
- * The room's side. The room reads the process-wide pool, whose file sits beside the test
- * database — so these write that file and take it away again.
+ * The room reads the process-wide pool, isolated by helpers.ts. These tests replace
+ * only that disposable file, never a developer's or production pool.
  */
 describe("Room — seed filter", () => {
-  const poolPath = join(dirname(process.env.MCHX_DB_PATH!), "seed-pool.jsonl");
+  const poolPath = process.env.MCHX_SEED_POOL!;
   let stamp = Date.now() + 60_000;
 
   function givePool(lines: string[]) {
@@ -171,16 +182,70 @@ describe("Room — seed filter", () => {
     assert.ok(boards.size > 1, "the board must not be a function of a seed that repeats");
   });
 
-  it("never touches a ranked room", () => {
+  it("tells the players where the match starts, and nobody else", () => {
+    givePool([record("42", ["lavaPool"], { start: { x: 28, z: 40, toward: "lavaPool", moved: true } })]);
+    const { room, a, b } = filteredRoom();
+    room.startMatchByHost("p1");
+    assert.deepEqual(a.sock.last("match_start")?.spawn, { x: 28, z: 40 });
+    assert.deepEqual(b.sock.last("match_start")?.spawn, { x: 28, z: 40 }, "both sides, the same column");
+
+    const spec = new FakeWs();
+    room.addSpectator(spec.ws);
+    assert.equal(spec.last("match_start")?.spawn, null, "a spectator is one message away from a player");
+  });
+
+  it("starts at the world's own spawn when the pool does not say otherwise", () => {
     givePool([record("42", ["village"])]);
+    const { room, a } = filteredRoom();
+    room.startMatchByHost("p1");
+    assert.equal(a.sock.last("match_start")?.spawn, null);
+  });
+
+  it("keeps out a client that would not start where it is told", () => {
+    givePool([record("42", ["village"])]);
+    // Protocol 3 is the last one that ignores `match_start.spawn`.
+    const { room } = filteredRoom();
+    room.removePlayer("p2");
+    assert.equal(room.whyNotSeat(3), "seedFilter");
+    assert.equal(room.addPlayer("old", "Old", null, new FakeWs().ws, null, 3), null);
+    assert.equal(room.whyNotSeat(4), null);
+  });
+
+  it("will not turn the filter on over such a client", () => {
+    const room = new Room(FAST);
+    seat(room, "p1", "Alice");
+    seat(room, "p2", "Old", null, null, 3);
+    assert.equal(room.updateSettings("p1", { seedFilter: true, saturation: false }), true);
+    assert.equal(room.settings.seedFilter, false, "dropped from the patch");
+    assert.equal(room.settings.saturation, false, "and the rest of the patch still applies");
+  });
+
+  it("uses the pool for ranked play and keeps the setting fixed", () => {
+    givePool([record("42", ["village"], { start: { x: 12, z: 34 } })]);
     const room = new Room(FAST, "ranked");
     const a = seat(room, "p1", "Alice");
     seat(room, "p2", "Bob");
-    assert.equal(room.updateSettings("p1", { seedFilter: true }), false, "nobody sets a ranked room's settings");
-    assert.equal(room.settings.seedFilter, false);
-    room.start();
-    assert.notEqual(room.seed, 42n);
-    assert.equal(a.sock.last("match_start")?.seedFeatures, null);
+    assert.equal(room.updateSettings("p1", { seedFilter: false }), false, "nobody sets a ranked room's settings");
+    assert.equal(room.settings.seedFilter, true);
+    assert.deepEqual(room.start(), { ok: true });
+    assert.equal(room.seed, 42n);
+    assert.deepEqual(a.sock.last("match_start")?.seedFeatures, ["village"]);
+    assert.deepEqual(a.sock.last("match_start")?.spawn, { x: 12, z: 34 });
+    const spec = new FakeWs();
+    room.addSpectator(spec.ws);
+    assert.equal(spec.last("match_start")?.seed, null);
+    assert.equal(spec.last("match_start")?.spawn, null);
+    assert.equal(withoutPoolSeed({ seed: "42", settings_json: JSON.stringify(room.settings) }).seed, null);
+  });
+
+  it("refuses a ranked start when the pool is empty", () => {
+    givePool([]);
+    const room = new Room(FAST, "ranked");
+    const a = seat(room, "p1", "Alice");
+    seat(room, "p2", "Bob");
+    assert.deepEqual(room.start(), { ok: false, reason: "seed_pool_empty" });
+    assert.equal(room.status, "waiting");
+    assert.equal(a.sock.last("match_start"), undefined);
   });
 
   it("tells a spectator what the seed has, and still not the seed", () => {

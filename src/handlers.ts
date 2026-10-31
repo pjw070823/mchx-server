@@ -371,8 +371,9 @@ function joinRoom(
   // a code of its own for the same reason the Minecraft gate uses it: it is the one error
   // whose message an already-installed build shows word for word, and those builds are
   // the only ones this is ever sent to.
-  if (!room.canSeat(protocolOf(state))) {
-    return sendError(ws, "protocol_mismatch", TEAM_ROOM_NEEDS_UPDATE);
+  const tooOldFor = room.whyNotSeat(protocolOf(state));
+  if (tooOldFor) {
+    return sendError(ws, "protocol_mismatch", ROOM_NEEDS_UPDATE[tooOldFor]);
   }
 
   const session = room.addPlayer(state.playerId, name, uuid, ws, state.remoteAddr, protocolOf(state));
@@ -386,7 +387,10 @@ function protocolOf(state: ConnState): number {
   return state.protocolVersion ?? MIN_SUPPORTED_PROTOCOL;
 }
 
-const TEAM_ROOM_NEEDS_UPDATE = "2대2 방입니다. 모드를 업데이트한 뒤 다시 참여해 주세요.";
+const ROOM_NEEDS_UPDATE = {
+  "2v2": "2대2 방입니다. 모드를 업데이트한 뒤 다시 참여해 주세요.",
+  seedFilter: "시드 필터링을 켠 방입니다. 모드를 업데이트한 뒤 다시 참여해 주세요.",
+} as const;
 
 /**
  * Who this connection is, as far as the server is concerned.

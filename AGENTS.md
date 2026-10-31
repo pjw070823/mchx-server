@@ -21,8 +21,11 @@ npm run dev          # http://localhost:8787 (API + WS), 웹은 SPECTATOR_PORT (
 - **`src/protocol.ts` 는 모드의 `Protocol.kt` 와 짝이다.** 한쪽만 고치면 에러 없이 필드가
   사라진다. 필드를 **추가**하는 것은 안전하고, 이름을 바꾸거나 지우는 것은 아니다.
 - **시드는 문자열로 내보낸다**(JSON 에 64비트 정수가 없다). **관전자에게는 시드를 보내지 않는다.**
-  **풀에서 뽑은 시드는 공개 API 에서도 가린다**(`withoutPoolSeed`). 시드나 관전자용 필드를 새로
-  내보낼 때마다 이 셋을 다시 묻는다.
+  **풀에서 뽑은 시드는 공개 API 에서도 가린다**(`withoutPoolSeed`). **풀 시드의 시작 위치
+  (`match_start.spawn`)는 플레이어에게만 보낸다.** 시드나 관전자용 필드를 새로 내보낼 때마다 이
+  넷을 다시 묻는다.
+- **서버는 자기보다 높은 프로토콜의 클라이언트를 거절한다.** `PROTOCOL_VERSION` 을 올리는 변경은
+  이 저장소를 먼저 배포하고, 그다음 모드를 게시한다.
 - **`missions.json` 은 사본이다.** 정본은 부모의 `shared/missions.json` 이고 `npm run sync-missions`
   로 맞춘다. 난이도별 하한(easy 12 · medium 8 · hard 5)을 깨면 서버가 기동하지 않는다.
 - **`src/release.ts` 의 해시는 손으로 붙여넣는다.** 틀리면 전원이 업데이트를 못 한다.

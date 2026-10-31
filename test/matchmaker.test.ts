@@ -1,8 +1,9 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
 
 // Sets MCHX_DB_PATH as a side effect. Must come before the dynamic imports below.
-import { FAST, FakeWs, fakeConn, muteConsole, VERIFIED } from "./helpers.js";
+import { FAST, FakeWs, fakeConn, muteConsole, VERIFIED, writeTestSeedPool } from "./helpers.js";
 
 const { RoomRegistry } = await import("../src/room.js");
 const { Matchmaker, eloWindow, QUEUE_TUNING } = await import("../src/matchmaker.js");
@@ -46,6 +47,27 @@ function player(opts: { uuid?: string; elo?: number; addr?: string | null } = {}
 }
 
 describe("Matchmaker — who may queue", () => {
+  it("refuses clients that cannot use the filtered starting position", () => {
+    const { mm } = harness();
+    const { state, sock } = player();
+    state.protocolVersion = 3;
+    assert.deepEqual(mm.enqueue(state, sock.ws), { ok: false, code: "protocol_mismatch" });
+    assert.equal(mm.size(), 0);
+  });
+
+  it("refuses entry without a seed pool and accepts it after the pool returns", () => {
+    const { mm } = harness();
+    const { state, sock } = player();
+    rmSync(process.env.MCHX_SEED_POOL!, { force: true });
+    try {
+      assert.deepEqual(mm.enqueue(state, sock.ws), { ok: false, code: "queue_failed" });
+      assert.equal(mm.size(), 0);
+    } finally {
+      writeTestSeedPool();
+    }
+    assert.deepEqual(mm.enqueue(state, sock.ws), { ok: true });
+  });
+
   it("refuses a guest", () => {
     // Ranked means rated, and settlement.ts force-unrates a match missing a uuid — so a
     // queued guest would produce a "ranked" match that moves nobody's rating.
@@ -162,6 +184,11 @@ describe("Matchmaker — pairing", () => {
     assert.equal(a.state.room, room, "the matchmaker seats the connection itself");
     assert.equal(b.state.room, room);
     assert.equal(h.mm.size(), 0);
+    for (const sock of [a.sock, b.sock]) {
+      assert.equal(sock.last("match_start")?.seed, "42");
+      assert.deepEqual(sock.last("match_start")?.spawn, { x: 12, z: 34 });
+      assert.deepEqual(sock.last("match_start")?.seedFeatures, ["village"]);
+    }
   });
 
   it("sends room_state before match_start", () => {
@@ -278,6 +305,31 @@ describe("Matchmaker — the ELO window", () => {
 });
 
 describe("Matchmaker — abuse and liveness", () => {
+  it("releases players if the pool disappears after they queue", () => {
+    const { mm, rooms } = harness();
+    const a = player();
+    const b = player();
+    mm.enqueue(a.state, a.sock.ws);
+    mm.enqueue(b.state, b.sock.ws);
+    rmSync(process.env.MCHX_SEED_POOL!, { force: true });
+    try {
+      assert.equal(mm.tick().matched.length, 0);
+      assert.equal(mm.size(), 0);
+      assert.equal(rooms.listActive().length, 0);
+      for (const entry of [a, b]) {
+        assert.equal(entry.state.room, null);
+        assert.equal(entry.sock.last("room_state"), undefined);
+        assert.equal(entry.sock.last("match_start"), undefined);
+        assert.equal(entry.sock.last("match_end"), undefined);
+        assert.equal(entry.sock.last("error")?.code, "queue_failed");
+        assert.equal(mm.hasUuid(entry.state.verified!.uuid), false);
+        assert.equal(rooms.findRoomContainingUuid(entry.state.verified!.uuid), null);
+      }
+    } finally {
+      writeTestSeedPool();
+    }
+  });
+
   it("never pairs two players behind one address", () => {
     // settlement.ts would force-unrate this after the fact, which is worse: they would
     // play a ranked match and get nothing for it.
