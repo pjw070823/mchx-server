@@ -139,16 +139,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
   margin: 4px 0 2px;
 }
 .hero-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-.hero-stats {
-  display: flex; flex-wrap: wrap; gap: 24px 44px;
-  margin-top: 48px; padding-top: 26px; border-top: 1px solid #1e232b;
-}
-.hero-stats b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
-.hero-stats span {
-  display: block;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 10.5px; letter-spacing: 0.12em; color: #6b7380; margin-top: 5px;
-}
 
 .hero-art { display: flex; justify-content: center; align-items: center; position: relative; }
 .hero-art::before {
@@ -178,27 +168,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 .hero-art .hexgrid { --w: clamp(40px, 4.4vw, 56px); }
 .hero-art .hrow { gap: 3px; margin-top: calc(2.6px - var(--w) * 0.2887); }
 .hero-art .hrow:first-child { margin-top: 0; }
-
-/* 규칙 */
-.rules {
-  max-width: 1280px; margin: 0 auto;
-  padding: 74px clamp(20px, 3vw, 40px) 96px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  gap: 40px 56px;
-}
-.rules h2 {
-  margin-top: 18px; font-size: clamp(24px, 2.4vw, 32px);
-  font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; max-width: 340px;
-}
-.rules-body { display: flex; flex-direction: column; gap: 22px; max-width: 620px; }
-.rule { display: flex; gap: 16px; }
-.rule i {
-  font-style: normal;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 11px; color: #4a7bfa; padding-top: 5px; flex-shrink: 0;
-}
-.rule p { margin: 0; font-size: 15.5px; line-height: 1.65; color: #b4bbc5; word-break: keep-all; }
 
 /* ------------------------------------------------------------------ 중계 */
 
@@ -500,13 +469,6 @@ h1, h2 { margin: 0; font-weight: 900; letter-spacing: -0.03em; word-break: keep-
 
 
 /* ---------------------------------------------------------------- 가이드 */
-
-/* 규칙 세 줄 아래의 "전체 보기". 규칙 문단과 같은 열에 맞춥니다(번호 폭 + 틈). */
-.rules-more {
-  margin-left: 30px;
-  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
-  font-size: 12px; letter-spacing: 0.06em; word-break: keep-all;
-}
 
 .guide {
   display: grid;

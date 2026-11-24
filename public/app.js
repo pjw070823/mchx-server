@@ -24,7 +24,6 @@ const state = {
   ranksTotal: null,
   // 1-based, per list. Reset on route entry, moved only by the pager.
   pages: { live: 1, replays: 1, ranks: 1 },
-  stats: { pool: "—", players: "—", matches: "—" },
   // 가이드에서 보고 있는 쪽의 id. 쪽이 바뀌었는지 알아야 스크롤을 올릴지 정할 수 있습니다.
   guide: null,
   // 설치 페이지가 광고할 빌드. 서버가 접속을 허용하는 그 값과 같은 곳에서 옵니다 —
@@ -37,13 +36,7 @@ const state = {
 const T = {
   ko: {
     nav1: "소개", nav2: "가이드", nav3: "라이브", nav4: "랭킹", nav5: "설치", getMod: "모드 받기",
-    guideMore: "규칙과 미션 전체 보기 →",
     ctaWatch: "라이브 보러 가기", ctaDl: "모드 내려받기",
-    statPool: "전체 목표", statPlayers: "등록 플레이어", statPlayed: "누적 판수",
-    rulesKicker: "규칙", rulesH: "목표 25개짜리 판 하나, 먼저 잇는 쪽이 이깁니다.",
-    r1: "63개 목표 중 25개가 뽑혀 5×5 육각 판에 깔립니다. 두 사람 모두 같은 판, 같은 시드로 시작합니다.",
-    r2: "목표를 깨면 그 칸이 내 색으로 넘어옵니다. 턴 순서도 없고, 한 번 넘어간 칸은 다시 뺏기지 않습니다.",
-    r3: "한쪽은 위아래, 다른 쪽은 좌우를 잇습니다. 자기 두 변이 끊김 없이 연결되는 순간 판이 끝납니다.",
     kLive: "라이브", liveH: "진행 중인 판", noLive: "지금 열려 있는 판이 없습니다.",
     kPrivate: "비공개 경기", codePh: "코드", codeBtn: "보기",
     codeNote: "비공개 판은 목록에 뜨지 않습니다. 받은 코드를 입력하세요.",
@@ -75,13 +68,7 @@ const T = {
   },
   en: {
     nav1: "Overview", nav2: "Guide", nav3: "Live", nav4: "Ranks", nav5: "Install", getMod: "Get the mod",
-    guideMore: "Full rules and every mission →",
     ctaWatch: "Watch a live match", ctaDl: "Get the client mod",
-    statPool: "OBJECTIVE POOL", statPlayers: "RATED PLAYERS", statPlayed: "MATCHES PLAYED",
-    rulesKicker: "THE RULES", rulesH: "Twenty-five objectives, one board, two edges to link.",
-    r1: "Twenty-five objectives are drawn from a pool of 63 and dealt onto a 5×5 hex board. Both players get the same board and the same world seed.",
-    r2: "Finishing an objective claims its tile. There is no turn order, nothing to spend, and a tile cannot be taken back once it is claimed.",
-    r3: "One player links top to bottom, the other left to right. First unbroken run of tiles between your own two edges ends the match.",
     kLive: "LIVE", liveH: "Live boards", noLive: "No boards are running right now.",
     kPrivate: "PRIVATE MATCH", codePh: "CODE", codeBtn: "Watch",
     codeNote: "Private boards are never listed. Enter the code the players gave you.",
@@ -240,7 +227,6 @@ function heroHexes() {
 
 function pageHome() {
   const L = t();
-  const s = state.stats;
   return `
     <div class="hero">
       <div>
@@ -249,41 +235,10 @@ function pageHome() {
           <a class="cta cta-lg" href="#/live">${L.ctaWatch}</a>
           <a class="cta-ghost" href="#/install">${L.ctaDl}</a>
         </div>
-        <div class="hero-stats">
-          <div><b>${s.pool}</b><span>${L.statPool}</span></div>
-          <div><b>${s.matches}</b><span>${L.statPlayed}</span></div>
-          <div><b>${s.players}</b><span>${L.statPlayers}</span></div>
-        </div>
       </div>
       <div class="hero-art">${heroHexes()}</div>
     </div>
-
-    <div class="rules">
-      <div>
-        <div class="kick">${L.rulesKicker}</div>
-        <h2>${L.rulesH}</h2>
-      </div>
-      <div class="rules-body">
-        <div class="rule"><i>01</i><p>${L.r1}</p></div>
-        <div class="rule"><i>02</i><p>${L.r2}</p></div>
-        <div class="rule"><i>03</i><p>${L.r3}</p></div>
-        <a class="rules-more" href="#/guide">${L.guideMore}</a>
-      </div>
-    </div>
   `;
-}
-
-async function loadStats() {
-  const [m, mm, lb] = await Promise.all([
-    api("/api/missions").catch(() => null),
-    api("/api/matches?limit=1").catch(() => null),
-    api("/api/leaderboard?limit=200").catch(() => null),
-  ]);
-  state.stats = {
-    pool: m ? String(m.missions.length) : "—",
-    matches: mm && mm.total != null ? String(mm.total) : "—",
-    players: lb ? String(lb.players.length) : "—",
-  };
 }
 
 /* -------------------------------------------------------------- 화면: 라이브 */
@@ -694,8 +649,6 @@ async function route() {
   }
 
   state.page = "home";
-  render(pageHome());
-  await loadStats();
   render(pageHome());
 }
 
